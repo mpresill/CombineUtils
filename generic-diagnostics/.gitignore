@@ -1,0 +1,8 @@
+# combine output, if anyone ever runs the driver from inside the repo
+higgsCombine*.root
+fitDiagnostics*.root
+multidimfit*.root
+combine_logger.out
+roostats-*
+*.log
+__pycache__/
