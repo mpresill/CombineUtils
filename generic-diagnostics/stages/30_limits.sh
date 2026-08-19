@@ -25,6 +25,9 @@ runs "combine -M AsymptoticLimits -d '$WS' -n '_lim_injected${TAG}' -m $MASS \
 blind="$(combine_out "$STAGE_DIR" "_lim_blind${TAG}" AsymptoticLimits)"
 inj="$(combine_out "$STAGE_DIR" "_lim_injected${TAG}" AsymptoticLimits)"
 
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  log "+ (dry run) would write limits${TAG}.txt"
+else
 python3 - "$STAGE_DIR/limits${TAG}.txt" "$CARD" "$MODE" "${blind:-}" "${inj:-}" <<'PY'
 import sys, ROOT
 ROOT.gROOT.SetBatch(True)
@@ -50,6 +53,8 @@ txt = "\n".join(lines)
 open(sys.argv[1], "w").write(txt)
 print(txt)
 PY
+[ $? -eq 0 ] || { warn "writing limits${TAG}.txt failed"; rc=1; }
+fi
 
 publish "$STAGE_DIR/limits${TAG}.txt" "$STAGE_DIR/limit_blind${TAG}.log" \
         "$STAGE_DIR/limit_injected${TAG}.log"

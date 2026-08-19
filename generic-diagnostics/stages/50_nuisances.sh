@@ -19,7 +19,7 @@ sentinel="$STAGE_DIR/.done"
 already_done "$sentinel" && { log "nuisances already done"; return 0; }
 
 fd="$CARD_OUT/$MODE/fitdiag/fitDiagnostics${TAG}.root"
-[ -f "$fd" ] || { warn "missing $fd -- run the fitdiag stage first"; return 1; }
+need_file "$fd" "missing $fd -- run the fitdiag stage first" || return 1
 cd "$STAGE_DIR" || return 1
 rc=0
 

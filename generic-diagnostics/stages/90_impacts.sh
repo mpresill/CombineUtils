@@ -28,9 +28,14 @@ rc=0
 
 name="imp${TAG}"
 
-nuis="$(python3 "$HERE/python/list_params.py" --workspace "$WS" --nuisances --sep ,)"
-rates="$(python3 "$HERE/python/list_params.py" --workspace "$WS" --free --regex '^norm_' --sep ,)"
-[ -n "$nuis" ] || { warn "could not list the nuisance parameters"; return 1; }
+need_file "$WS" "no workspace, run the workspace stage first" || return 1
+nuis="$(python3 "$HERE/python/list_params.py" --workspace "$WS" --nuisances --sep , 2>/dev/null)"
+rates="$(python3 "$HERE/python/list_params.py" --workspace "$WS" --free --regex '^norm_' --sep , 2>/dev/null)"
+if [ -z "$nuis" ]; then
+  warn "could not list the nuisance parameters"
+  [ "${DRY_RUN:-0}" = "1" ] || return 1
+  nuis="<nuisances>"
+fi
 named="$nuis"; [ -n "$rates" ] && named="$nuis,$rates"
 log "$(echo "$named" | tr ',' '\n' | wc -l) parameters in the ranking"
 
@@ -58,13 +63,26 @@ fi
 runs "combineTool.py $common --doInitialFit > 'impacts_initial${TAG}.log' 2>&1" \
   || { warn "initial impact fit failed, see impacts_initial${TAG}.log"; return 1; }
 
-runs "combineTool.py $common --doFits $job > 'impacts_fits${TAG}.log' 2>&1" \
-  || { warn "per-nuisance impact fits failed, see impacts_fits${TAG}.log"; rc=1; }
+# On condor the stage has to run twice: once to submit, once to collect. Decide
+# which of the two this is by counting the per-parameter fit outputs that are
+# already on disk, otherwise a re-run just resubmits the same jobs for ever and
+# the json is never produced.
+want=$(echo "$named" | tr ',' '\n' | grep -c .)
+have=$(ls higgsCombine_paramFit_"${name}"_*.root 2>/dev/null | wc -l)
 
-if [ "${IMPACTS_JOB_MODE:-interactive}" = "condor" ]; then
-  log "condor jobs submitted; re-run this stage once the queue is empty"
-  log "  watch with: condor_q -nobatch"
-  return 0
+if [ "$have" -ge "$want" ]; then
+  log "$have/$want per-parameter fits already present, collecting"
+else
+  runs "combineTool.py $common --doFits $job > 'impacts_fits${TAG}.log' 2>&1" \
+    || { warn "per-nuisance impact fits failed, see impacts_fits${TAG}.log"; rc=1; }
+  if [ "${IMPACTS_JOB_MODE:-interactive}" = "condor" ]; then
+    log "$want condor jobs submitted ($have already done); re-run this stage"
+    log "once the queue is empty and it will collect instead of resubmitting"
+    log "  watch with: condor_q -nobatch"
+    return 0
+  fi
+  have=$(ls higgsCombine_paramFit_"${name}"_*.root 2>/dev/null | wc -l)
+  [ "$have" -ge "$want" ] || warn "only $have/$want per-parameter fits produced"
 fi
 
 runs "combineTool.py $common -o 'impacts${TAG}.json' > 'impacts_collect${TAG}.log' 2>&1" \

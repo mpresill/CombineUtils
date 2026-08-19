@@ -11,6 +11,7 @@ combine itself has no such problem: it is only used for the CH-based checks.
 Prints the path of the localized card.
 """
 import argparse
+import hashlib
 import os
 import shutil
 import sys
@@ -29,7 +30,7 @@ def main():
     card_dir = os.path.dirname(os.path.abspath(a.card))
     os.makedirs(a.outdir, exist_ok=True)
 
-    out_lines, linked = [], {}
+    out_lines, linked, taken = [], {}, {}
     with open(a.card) as f:
         for line in f:
             fields = line.split()
@@ -39,6 +40,16 @@ def main():
                 if src not in ("FAKE",):
                     abs_src = src if os.path.isabs(src) else os.path.join(card_dir, src)
                     base = os.path.basename(abs_src)
+                    # Two `shapes` lines may point at the same file name in
+                    # different directories. Using the bare basename would make
+                    # the second link overwrite the first and silently validate
+                    # the wrong templates, so disambiguate on collision.
+                    if base in taken and taken[base] != os.path.realpath(abs_src):
+                        stem, ext = os.path.splitext(base)
+                        base = "%s_%s%s" % (
+                            stem, hashlib.md5(
+                                os.path.realpath(abs_src).encode()).hexdigest()[:8], ext)
+                    taken[base] = os.path.realpath(abs_src)
                     dest = os.path.join(a.outdir, base)
                     if src not in linked:
                         if not os.path.exists(abs_src):

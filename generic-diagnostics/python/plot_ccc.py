@@ -76,7 +76,9 @@ def main():
          "%-22s %10s %10s %10s %8s" % ("group", a.poi, "-", "+", "n sigma")]
     worst = (None, 0.0)
     for label, v, lo, hi in rows:
-        err = abs(lo) if v < comb_val else abs(hi)
+        # The relevant error is the one pointing *towards* the combined value:
+        # a group below the combination has to travel up to reach it.
+        err = abs(hi) if v < comb_val else abs(lo)
         tot = math.sqrt(err ** 2 + comb_err ** 2) if err else float("nan")
         nsig = (v - comb_val) / tot if tot and tot == tot else float("nan")
         L.append("%-22s %10.4f %10.4f %10.4f %8.2f" % (label, v, lo, hi, nsig))

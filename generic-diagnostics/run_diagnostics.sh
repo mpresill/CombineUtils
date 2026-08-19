@@ -8,6 +8,8 @@
 #    ./run_diagnostics.sh --list
 #    ./run_diagnostics.sh -c boosted_e -s validate,workspace,significance
 #    ./run_diagnostics.sh -n                     # dry run: print commands only
+#                                                # (stage scaffolding -- mkdir,
+#                                                #  parameter listing -- still runs)
 #    ./run_diagnostics.sh                        # everything, both modes
 #
 #  Configuration lives in config.sh.
@@ -23,7 +25,10 @@ source "$HERE/lib/common.sh"
 STAGE_ORDER=(validate workspace significance limits fitdiag nuisances \
              prepostfit scan breakdown crfit impacts gof extras)
 # Stages that do not depend on the Asimov flavour -- run once per card.
-MODE_INDEPENDENT=" validate workspace crfit "
+# gof belongs here: both its statistic and its toys come from the workspace
+# dataset, so running it per mode only produced two independently fluctuated
+# p-values for the same test.
+MODE_INDEPENDENT=" validate workspace crfit gof "
 
 declare -A STAGE_DOC=(
   [validate]="datacard sanity: ValidateDatacards.py, systematicsAnalyzer, shape/rate audit"
@@ -51,7 +56,8 @@ usage: $(basename "$0") [options]
   -j, --ncores N       --parallel for combineTool         (default: $NCORES)
       --condor         send the per-nuisance impact fits to HTCondor
   -f, --force          re-run stages that already completed
-  -n, --dry-run        print the commands without running them
+  -n, --dry-run        print the combine/plot commands instead of running
+                       them; nothing is fitted and nothing is published
   -k, --keep-going     do not stop the card on a failing stage (default: on)
   -x, --stop-on-error  abort the whole run on the first failing stage
   -l, --list           list the stages and exit
@@ -75,13 +81,18 @@ list_stages() {
 SEL_STAGES=("${STAGE_ORDER[@]}")
 KEEP_GOING=1
 
+# Options that take a value must be told so: without this a trailing "--cards"
+# leaves $2 unset, `shift 2` fails, and the loop spins forever.
+need_arg() { [ $# -ge 2 ] || die "option '$1' needs an argument (try --help)"; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    -c|--cards)   IFS=', ' read -r -a CARDS      <<< "$2"; shift 2 ;;
-    -m|--modes)   IFS=', ' read -r -a MODES      <<< "$2"; shift 2 ;;
-    -s|--stages)  if [ "$2" = "all" ]; then SEL_STAGES=("${STAGE_ORDER[@]}")
+    -c|--cards)   need_arg "$@"; IFS=', ' read -r -a CARDS  <<< "$2"; shift 2 ;;
+    -m|--modes)   need_arg "$@"; IFS=', ' read -r -a MODES  <<< "$2"; shift 2 ;;
+    -s|--stages)  need_arg "$@"
+                  if [ "$2" = "all" ]; then SEL_STAGES=("${STAGE_ORDER[@]}")
                   else IFS=', ' read -r -a SEL_STAGES <<< "$2"; fi; shift 2 ;;
-    -j|--ncores)  NCORES="$2"; shift 2 ;;
+    -j|--ncores)  need_arg "$@"; NCORES="$2"; shift 2 ;;
     --condor)     IMPACTS_JOB_MODE=condor; shift ;;
     -f|--force)   FORCE=1; shift ;;
     -n|--dry-run) DRY_RUN=1; shift ;;
@@ -105,12 +116,13 @@ setup_combine_env
 mkdir -p "$OUTDIR" || die "cannot create OUTDIR=$OUTDIR"
 # Deliberately no index.php at the top level: index.html is the summary page
 # and the web server would otherwise serve the php gallery instead.
-mkdir -p "$WWWDIR"  || die "cannot create WWWDIR=$WWWDIR"
+[ "${DRY_RUN:-0}" = "1" ] || mkdir -p "$WWWDIR" || die "cannot create WWWDIR=$WWWDIR"
 
 STATUS_FILE="$OUTDIR/status.tsv"
-RUN_START_LINE=1
-[ -f "$STATUS_FILE" ] && RUN_START_LINE=$(( $(wc -l < "$STATUS_FILE") + 1 ))
+# Write the header first, then take the start line, so that the header itself
+# (whose 4th field is "status", not "OK") is never scanned as a failed stage.
 [ -f "$STATUS_FILE" ] || printf 'card\tmode\tstage\tstatus\tseconds\tstarted\n' > "$STATUS_FILE"
+RUN_START_LINE=$(( $(wc -l < "$STATUS_FILE") + 1 ))
 
 record() {  # card mode stage status seconds
   [ "${DRY_RUN:-0}" = "1" ] && return 0
@@ -142,7 +154,12 @@ run_stage() {
     export TAG="_${card}"
   fi
 
-  [ -f "$CARD_PATH" ] || { warn "missing datacard $CARD_PATH"; record "$card" "$mode" "$stage" MISSING_CARD 0; return 1; }
+  if [ ! -f "$CARD_PATH" ]; then
+    warn "missing datacard $CARD_PATH"
+    record "$card" "$mode" "$stage" MISSING_CARD 0
+    [ "$KEEP_GOING" = "1" ] || die "aborting (--stop-on-error)"
+    return 0
+  fi
 
   mkdir -p "$STAGE_DIR"
   local t0 rc

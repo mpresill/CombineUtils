@@ -48,8 +48,9 @@ if [ -n "$total" ]; then
     || { warn "plot_scan.py failed"; rc=1; }
 fi
 
+# plot_scan.py writes <report basename>.json beside the report.
 publish "$STAGE_DIR/scan_summary${TAG}.txt"
-[ -f "$STAGE_DIR/scan${TAG}.json" ] && publish "$STAGE_DIR/scan${TAG}.json"
+[ -f "$STAGE_DIR/scan_summary${TAG}.json" ] && publish "$STAGE_DIR/scan_summary${TAG}.json"
 for f in "$STAGE_DIR"/*.png "$STAGE_DIR"/*.pdf; do [ -e "$f" ] && publish "$f"; done
 [ "$rc" -eq 0 ] && mark_done "$sentinel"
 return $rc

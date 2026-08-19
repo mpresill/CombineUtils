@@ -29,12 +29,12 @@
 sentinel="$STAGE_DIR/.done"
 already_done "$sentinel" && { log "gof already done"; return 0; }
 
-[ -f "$WS" ] || { warn "no workspace, run the workspace stage first"; return 1; }
+need_file "$WS" "no workspace, run the workspace stage first" || return 1
 cd "$STAGE_DIR" || return 1
 rc=0
 
 masks="$(python3 "$HERE/python/list_masks.py" --workspace "$WS" \
-           --mask-regex "$CR_SUFFIX_REGEX" --invert --as-setparameters)"
+           --mask-regex "$CR_SUFFIX_REGEX" --invert --as-setparameters 2>/dev/null)"
 if [ -z "$masks" ]; then
   warn "the workspace has no mask_* parameters: rebuild it with FORCE=1 so that"
   warn "text2workspace.py is called with --channel-masks; skipping the CR-only GoF"

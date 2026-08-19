@@ -36,7 +36,12 @@ def main():
     p.add_argument("--as-setparameters", action="store_true")
     a = p.parse_args()
 
-    f = ROOT.TFile.Open(a.workspace)
+    # ROOT raises OSError here for a missing file; a traceback is not useful
+    # to anyone reading a stage log.
+    try:
+        f = ROOT.TFile.Open(a.workspace)
+    except OSError as exc:
+        sys.exit(str(exc))
     if not f or f.IsZombie():
         sys.exit("cannot open %s" % a.workspace)
     w = f.Get(a.ws_name)

@@ -12,7 +12,7 @@ sentinel="$STAGE_DIR/.done"
 already_done "$sentinel" && { log "prepostfit already done"; return 0; }
 
 fd="$CARD_OUT/$MODE/fitdiag/fitDiagnostics${TAG}.root"
-[ -f "$fd" ] || { warn "missing $fd -- run the fitdiag stage first"; return 1; }
+need_file "$fd" "missing $fd -- run the fitdiag stage first" || return 1
 
 runs "python3 '$HERE/python/plot_prepostfit.py' --input '$fd' \
         --outdir '$STAGE_DIR' --groups-json '$PROCESS_GROUPS' \

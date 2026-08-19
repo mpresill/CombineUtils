@@ -24,7 +24,7 @@ from collections import OrderedDict
 STAGES = ["validate", "workspace", "significance", "limits", "fitdiag",
           "nuisances", "prepostfit", "scan", "breakdown", "crfit", "impacts",
           "gof", "extras"]
-MODE_INDEPENDENT = {"validate", "workspace", "crfit"}
+MODE_INDEPENDENT = {"validate", "workspace", "crfit", "gof"}
 
 
 def read_json(path):
@@ -95,11 +95,15 @@ def collect(outdir, card, mode):
         r["n_inflated"] = len(fl.get("inflated", []))
         r["n_nonzero_asimov"] = len(fl.get("nonzero_on_asimov", []))
 
-    gof = read_json(os.path.join(base, "gof", "gof_summary%s.json" % tag))
+    # gof is mode independent: it lives under $OUTDIR/<card>/gof with the
+    # card-only tag, whichever mode row we are filling in here.
+    card_tag = "_%s" % card
+    gof = read_json(os.path.join(outdir, card, "gof",
+                                 "gof_summary%s.json" % card_tag))
     if gof:
         bits = []
         for e in gof.get("results", []):
-            label = e["name"].replace("gof_", "").replace(tag, "")
+            label = e["name"].replace("gof_", "").replace(card_tag, "")
             bits.append("%s p=%.2f%s" % (label, e["pvalue"],
                                          " (vacuous)" if e["vacuous"] else ""))
         r["gof"] = "; ".join(bits) or None

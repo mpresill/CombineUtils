@@ -182,12 +182,19 @@ class Audit(object):
             return
 
         n, u, d = contents(hn), contents(hu), contents(hd)
+        # A `shape <scale>` entry tells combine to apply only `scale` of the
+        # template excursion. Everything below -- the ranking, the "negligible /
+        # prunable" verdict, the one-sided test -- has to see the scaled effect,
+        # or a `shape 0.5` line is judged on twice the variation the fit uses.
+        if scale != 1.0:
+            u = [vn + scale * (vv - vn) for vn, vv in zip(n, u)]
+            d = [vn + scale * (vv - vn) for vn, vv in zip(n, d)]
         tn, tu, td = sum(n), sum(u), sum(d)
         if tn <= 0:
             return
         ru, rd = rel(tu, tn), rel(td, tn)
 
-        if any(v < 0 for v in u + d):
+        if any(v < 0 for v in contents(hu) + contents(hd)):
             self.add("ERROR", "negative_variation",
                      "Up/Down template has negative bins", **where)
 
@@ -212,7 +219,7 @@ class Audit(object):
                 flips.append(i + 1)
 
         self.impacts.append(dict(channel=chan, process=proc, systematic=syst,
-                                 impact=impact, bin=imp_bin,
+                                 impact=impact, bin=imp_bin, scale=scale,
                                  rate_up=ru, rate_down=rd))
 
         # One-sided: both variations move the yield the same way, so combine
@@ -242,7 +249,8 @@ class Audit(object):
                      % (len(flips), flips[:10]), **where)
         if scale not in (0.0, 1.0):
             self.add("INFO", "scaled_shape",
-                     "shape entry is scaled by %g in the card" % scale, **where)
+                     "shape entry is scaled by %g in the card; the audit below uses "
+                     "the scaled variation" % scale, **where)
 
     # -- lnN ---------------------------------------------------------------
     def check_lnN(self, chan, proc, syst, value):

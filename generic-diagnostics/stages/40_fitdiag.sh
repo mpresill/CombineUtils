@@ -28,17 +28,24 @@ runs "combine -M FitDiagnostics -d '$WS' -m $MASS -n '$TAG' $DATA_OPTS \
   || { warn "FitDiagnostics failed, see $STAGE_DIR/fitdiag${TAG}.log"; rc=1; }
 
 fd="$STAGE_DIR/fitDiagnostics${TAG}.root"
-[ -f "$fd" ] || { warn "no $fd produced"; return 1; }
+if [ ! -f "$fd" ] && [ "${DRY_RUN:-0}" != "1" ]; then
+  warn "no $fd produced"; return 1
+fi
 
 # --- did the minimiser actually converge, and is the covariance usable? ----
-if grep -qiE "fit failed|MINIMIZATION.*FAILED|is not positive definite" "fitdiag${TAG}.log"; then
+if [ "${DRY_RUN:-0}" != "1" ] && \
+   grep -qiE "fit failed|MINIMIZATION.*FAILED|is not positive definite" "fitdiag${TAG}.log"; then
   warn "the fit log reports a problem:"
   grep -iE "fit failed|MINIMIZATION.*FAILED|is not positive|covariance matrix quality" \
       "fitdiag${TAG}.log" | head -10
   rc=1
 fi
-grep -E "Best fit ${POI}:|covariance matrix quality|Status :" "fitdiag${TAG}.log" | head -8
+[ "${DRY_RUN:-0}" = "1" ] || \
+  grep -E "Best fit ${POI}:|covariance matrix quality|Status :" "fitdiag${TAG}.log" | head -8
 
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  log "+ (dry run) would write bestfit${TAG}.txt"
+else
 python3 - "$fd" "$STAGE_DIR/bestfit${TAG}.txt" "$CARD" "$MODE" "$EXPECT_SIGNAL" <<'PY'
 import sys, ROOT
 ROOT.gROOT.SetBatch(True)
@@ -68,6 +75,8 @@ txt = "\n".join(L)
 open(sys.argv[2], "w").write(txt + "\n")
 print(txt)
 PY
+[ $? -eq 0 ] || { warn "writing bestfit${TAG}.txt failed"; rc=1; }
+fi
 
 publish "$STAGE_DIR/bestfit${TAG}.txt" "$STAGE_DIR/fitdiag${TAG}.log"
 [ "$rc" -eq 0 ] && mark_done "$sentinel"

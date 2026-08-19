@@ -17,8 +17,12 @@ runs "combine -M Significance -d '$WS' -n '$tag' -m $MASS $DATA_OPTS \
   || { warn "Significance failed, see $STAGE_DIR/significance${TAG}.log"; return 1; }
 
 out="$(combine_out "$STAGE_DIR" "$tag" Significance)"
-[ -n "$out" ] || { warn "no Significance output found"; return 1; }
+[ -n "$out" ] || { warn "no Significance output found"; [ "${DRY_RUN:-0}" = "1" ] || return 1; }
 
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  log "+ (dry run) would write significance${TAG}.txt"
+  rc=0
+else
 python3 - "$out" "$STAGE_DIR/significance${TAG}.txt" "$CARD" "$MODE" "$EXPECT_SIGNAL" <<'PY'
 import sys, math, ROOT
 ROOT.gROOT.SetBatch(True)
@@ -33,6 +37,7 @@ open(sys.argv[2], "w").write(txt)
 print(txt)
 PY
 rc=$?
+fi
 
 publish "$STAGE_DIR/significance${TAG}.txt" "$STAGE_DIR/significance${TAG}.log"
 [ "$rc" -eq 0 ] && mark_done "$sentinel"

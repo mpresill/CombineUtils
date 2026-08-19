@@ -59,7 +59,12 @@ def main():
     p.add_argument("--out-json")
     a = p.parse_args()
 
-    f = ROOT.TFile.Open(a.workspace)
+    # ROOT raises OSError here for a missing file; a traceback is not useful
+    # to anyone reading a stage log.
+    try:
+        f = ROOT.TFile.Open(a.workspace)
+    except OSError as exc:
+        sys.exit(str(exc))
     if not f or f.IsZombie():
         sys.exit("cannot open %s" % a.workspace)
     w = f.Get(a.ws_name)
@@ -85,8 +90,12 @@ def main():
                 and not v.GetName().startswith("n_exp")
                 and v.GetName() not in set(g.GetName() for g in globs)]
     # rateParams show up here; keep the ones that look like free parameters.
+    # mask_* comes from text2workspace --channel-masks: floating, but neither a
+    # nuisance nor a rate parameter. Left in, every channel mask is reported as
+    # a free parameter and, sitting at 0 in [0,1], as one on its boundary.
     free = [v for v in floating if hasattr(v, "getMin")
             and v.GetName() not in ("MH", "CMS_th1x")
+            and not v.GetName().startswith("mask_")
             and not v.GetName().startswith("shapeBkg")
             and not v.GetName().startswith("shapeSig")]
 

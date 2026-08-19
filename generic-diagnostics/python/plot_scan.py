@@ -42,10 +42,14 @@ def read_scan(path, poi):
     y = np.array(y)
     o = np.argsort(x)
     x, y = x[o], y[o]
-    # combine writes the best fit as the first entry, duplicated in the grid
-    y = y - y.min()
+    # combine references deltaNLL to the nominal fit, so a grid point that found
+    # a better minimum shows up as a *negative* value. Record that before
+    # shifting the curve to zero, otherwise the health check below can never
+    # see it.
+    below = float(y.min())
     keep = np.concatenate(([True], np.diff(x) > 0))
-    return x[keep], y[keep]
+    y = y - y.min()
+    return x[keep], y[keep], below
 
 
 def crossings(x, y, level):
@@ -96,7 +100,7 @@ def main():
 
     L = ["title  %s" % a.title, ""]
     out = {}
-    for label, color, x, y in curves:
+    for label, color, x, y, below in curves:
         ax.plot(x, y, color=color, lw=1.8, label=label)
         best, lo68, hi68 = interval(x, y, 1.0)
         _, lo95, hi95 = interval(x, y, 3.84)
@@ -119,9 +123,9 @@ def main():
         notes = []
         if i0 in (0, len(x) - 1):
             notes.append("minimum sits at the edge of the scanned range")
-        if np.any(y < -1e-6):
-            notes.append("negative 2*deltaNLL: the grid found a better minimum "
-                         "than the nominal fit")
+        if below < -1e-6:
+            notes.append("negative 2*deltaNLL (%.3g): a grid point found a "
+                         "better minimum than the nominal fit" % below)
         left, right = y[:i0 + 1][::-1], y[i0:]
         if np.any(np.diff(left) < -1e-3) or np.any(np.diff(right) < -1e-3):
             notes.append("curve is not monotonic away from the minimum: "

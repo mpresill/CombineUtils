@@ -18,20 +18,21 @@
 sentinel="$STAGE_DIR/.done"
 already_done "$sentinel" && { log "crfit already done"; return 0; }
 
-[ -f "$WS" ] || { warn "no workspace, run the workspace stage first"; return 1; }
+need_file "$WS" "no workspace, run the workspace stage first" || return 1
 cd "$STAGE_DIR" || return 1
 
 masks="$(python3 "$HERE/python/list_masks.py" --workspace "$WS" \
-           --mask-regex "$CR_SUFFIX_REGEX" --invert --as-setparameters)"
+           --mask-regex "$CR_SUFFIX_REGEX" --invert --as-setparameters 2>/dev/null)"
 if [ -z "$masks" ]; then
   warn "the workspace has no mask_* parameters; rebuild it with FORCE=1 so"
   warn "text2workspace.py runs with --channel-masks. Skipping."
-  return 1
+  [ "${DRY_RUN:-0}" = "1" ] || return 1
+  masks="<mask_SR>=1"
 fi
 
 resolve_parameter_sets || return 1
 rates="$RATE_PARAMS"
-[ -n "$rates" ] || { warn "no free rate parameters matching $RATE_PARAM_REGEX"; return 1; }
+[ -n "$rates" ] || { warn "no free rate parameters matching $RATE_PARAM_REGEX"; [ "${DRY_RUN:-0}" = "1" ] || return 1; }
 log "masking: $masks"
 log "fitting: $rates"
 
@@ -44,7 +45,7 @@ runs "combine -M MultiDimFit -d '$WS' -m $MASS -n '_crfit${TAG}' \
   || { warn "control-region fit failed, see crfit${TAG}.log"; return 1; }
 
 out="$(combine_out "$STAGE_DIR" "_crfit${TAG}" MultiDimFit)"
-[ -n "$out" ] || { warn "no MultiDimFit output"; return 1; }
+[ -n "$out" ] || { warn "no MultiDimFit output"; [ "${DRY_RUN:-0}" = "1" ] || return 1; }
 
 runs "python3 '$HERE/python/summarize_crfit.py' --input '$out' \
         --params '$rates' --title '$CARD' \

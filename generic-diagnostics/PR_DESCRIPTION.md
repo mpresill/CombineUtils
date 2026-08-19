@@ -65,3 +65,28 @@ Expected significance 2.59 sigma, `r = 1.000 +0.66/-0.48`, all `asimov` pulls ex
 Runtime, single-category card: `fitdiag` ~10 min (it is `--saveWithUncertainties` throwing 200 toys per channel), `extras` ~4 min, `breakdown` ~2 min, `scan` ~1 min. The `combined` card has 12 channels and will be several times slower; `impacts` there wants `--condor`.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---
+
+## Review follow-ups (Copilot, PR #1)
+
+All 16 comments addressed. The substantive ones:
+
+| # | Defect | Fix |
+|---|--------|-----|
+| 1 | The `status.tsv` header was scanned as a failed stage, so a clean first run always reported one failure | take `RUN_START_LINE` *after* writing the header |
+| 2 | A value option given as the last argument (`--cards`) left `$2` unset, `shift 2` failed, and the parse loop spun forever | `need_arg` guard on every option that takes a value |
+| 4 | On `--condor` the stage submitted and returned every time, so `impacts*.json` was never produced | count the per-parameter fit outputs and collect once they are all present |
+| 5 | The "a grid point found a better minimum" check could never fire — the curve was shifted to zero before it ran | record the raw minimum before shifting |
+| 6 | `--channel-masks` puts floating `mask_*` vars in the workspace; the dump reported each as a free parameter *and* as sitting on its boundary | exclude `mask_*`, as `list_params.py` already did |
+| 7 | Channel compatibility used the error pointing *away* from the combined value, misreporting every n-sigma | a group below the combination travels up, so use the up error |
+| 8 | Vacuity was tested as `obs < min(toys)`: it missed the all-zero case (says `vacuous: false`) and flagged good fits, which land there 1/(N+1) of the time | test the statistic itself — numerically zero, zero toy spread, or orders of magnitude below the toy median |
+| 9 | The parameter-set cache keyed on the workspace timestamp only, so changing `RATE_PARAM_REGEX` or the rateParam bounds silently reused the old lists | signature line covering all four inputs |
+| 10 | `shape <scale>` entries were audited on the full template excursion, not the scaled one combine actually applies | apply `scale` before ranking (the negative-bin check stays on the raw template) |
+| 13 | `plot_scan.py` writes `scan_summary*.json`; the stage published `scan*.json`, so the machine-readable result never reached the web area | fixed the name |
+| 14 | Two `shapes` lines with the same file name in different directories collided on one symlink, silently validating the wrong templates | disambiguate with a path hash |
+| 16 | `gof` reads neither `MODE` nor `DATA_OPTS`, but ran once per mode, producing two differently fluctuated p-values presented as mode-specific | moved to `MODE_INDEPENDENT` |
+
+3, 11, 12 and 15 were smaller: dropped exit statuses on the inline report generators, a missing datacard bypassing `--stop-on-error`, and `--dry-run` doing real work. A dry run of one card now prints 59 commands with no stage failures and no side effects beyond `mkdir`.
+
+Verified after the changes: `validate` + `workspace` on `boosted_e` reproduce the earlier numbers (33 prunable systematics, 153 nuisances, 12 autoMCStats), the workspace dump now lists 2 free parameters instead of 5 and no boundary parameters, the scan health check fires on a synthetic curve with a negative point, and the GoF summariser separates all-zero, below-all-toys, and ordinary p-values correctly.
