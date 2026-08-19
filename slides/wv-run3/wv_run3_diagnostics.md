@@ -53,8 +53,9 @@ style: |
   .box {
     background: var(--tt-light);
     border-left: 5px solid var(--tt-scarlet);
-    padding: 8px 14px; margin: 8px 0; font-size: 20px;
+    padding: 6px 14px; margin: 8px 0; font-size: 20px;
   }
+  .box p { margin: 5px 0; }
   img { display: block; margin: 0 auto; }
   .small { font-size: 18px; }
   .tiny  { font-size: 15px; color: var(--tt-grey); }
@@ -67,6 +68,7 @@ style: |
     font-size: 46px;
   }
   section.title h2 { color: var(--tt-scarlet); }
+  section.title code { background: #2A2A2A; color: #FFFFFF; }
   section.title p  { color: #DCDCDC; }
 ---
 
@@ -108,7 +110,9 @@ Stages: `validate · workspace · significance · fitdiag · nuisances · scan �
 `data_obs` in all 10 SR bins is **non-integer** and carries **exactly zero bin errors**; the CRs hold plain integer counts with $\sqrt{N}$ errors.
 
 <div class="box">
-Non-integer content with no errors cannot be an observed event count → the SRs contain a <b>pseudo-dataset</b>, not data.
+
+Non-integer content with no errors cannot be an observed event count → the SRs contain a **pseudo-dataset**, not data.
+
 </div>
 
 Only **`crfit`** touches observed data, and only with the SRs masked and $r$ frozen to 0.
@@ -149,7 +153,9 @@ Only **`crfit`** touches observed data, and only with the SRs masked and $r$ fro
 | **combined** | **3.74** | **3.85** |
 
 <div class="box">
-Quadrature sum of the four = 3.93 vs 3.74 combined: the ~5% loss is the price of the <b>correlated</b> rate parameters and b-tag systematics shared across categories. The combination behaves sensibly.
+
+Quadrature sum of the four = 3.93 vs 3.74 combined: the ~5% loss is the price of the **correlated** rate parameters and b-tag systematics shared across categories. The combination behaves sensibly.
+
 </div>
 
 The two modes agree to 3%: **the card is stable** against where the Asimov is generated.
@@ -206,13 +212,13 @@ The eight unconstrained `norm_top_*` / `norm_wjet_*` rate parameters own the top
 <div class="cols">
 <div>
 
-![w:470](figs/breakdown_asimov.png)
+![w:420](figs/breakdown_asimov.png)
 <span class="tiny">`asimov`</span>
 
 </div>
 <div>
 
-![w:470](figs/breakdown_asimovFreq.png)
+![w:420](figs/breakdown_asimovFreq.png)
 <span class="tiny">`asimovFreq`</span>
 
 </div>
@@ -221,7 +227,9 @@ The eight unconstrained `norm_top_*` / `norm_wjet_*` rate parameters own the top
 Ordering is consistent: **background normalisation ≈ b-tagging > MC statistics > theory / V-tagging**, each ~40–50% of the total.
 
 <div class="box">
-<b>Caveat — the group breakdown is not trustworthy as it stands.</b> Several <code>--freezeNuisanceGroups</code> fits returned <i>"No valid low-error found"</i> and were dropped: <code>V_tagging</code> is missing from <code>asimov</code>, <code>theory</code> from <code>asimovFreq</code>, and the <code>asimov</code> stat-only fit failed outright. Four groups even come out with a <b>negative</b> contribution (frozen fit <i>wider</i> than the total), which is unphysical. Quote the stat-only subtraction ($\sigma_{\rm syst}=0.331$ from <code>asimovFreq</code>), not the group table, until the scan ranges are widened.
+
+**Caveat — the group breakdown is not trustworthy as it stands.** Several `--freezeNuisanceGroups` fits returned *"No valid low-error found"* and were dropped — `V_tagging` from `asimov`, `theory` from `asimovFreq` — and the `asimov` stat-only fit failed outright. Four groups come out with an unphysical **negative** contribution (frozen fit *wider* than the total). Until the scan ranges are widened, quote the stat-only subtraction ($\sigma_{\rm syst} = 0.331$, `asimovFreq`), not the group table.
+
 </div>
 
 ---
@@ -253,7 +261,9 @@ Same ranking in both modes → robust.
 </div>
 
 <div class="box">
-<b>Two things to look at in resolved.</b> (1) <code>AK4PFPuppi_JES_Total</code> in <code>resolved_e</code> is violently <b>one-sided</b>: $\Delta r = -0.10 / +0.75$, and it shrinks to $+0.47$ in <code>asimovFreq</code>. A 75%-of-$r$ one-sided impact is a template problem, not a measurement. (2) Several <code>prop_bin</code> parameters in the last bins carry impacts of 0.33–0.48 — those bins are too thinly populated to be used as they are; consider rebinning the tail.
+
+**Two things to look at in resolved.** (1) `AK4PFPuppi_JES_Total` in `resolved_e` is violently **one-sided**: $\Delta r = -0.10 / +0.75$, shrinking to $+0.47$ in `asimovFreq`. A 75%-of-$r$ one-sided impact is a template problem, not a measurement. (2) Several `prop_bin` parameters in the last bins carry impacts of 0.33–0.48 — those bins are too thinly populated to be used as they are; consider rebinning the tail.
+
 </div>
 
 ---
@@ -278,7 +288,9 @@ For an MC-replica set the uncertainty is the **RMS over replicas**:
 <div>
 
 <div class="box">
-The current treatment overestimates the PDF uncertainty by a factor $\sqrt{100} = 10$, and spends <b>101 of the 211 impact fits</b> (~half the CPU) on it.
+
+The current treatment overestimates the PDF uncertainty by a factor $\sqrt{100} = 10$, and spends **101 of the 211 impact fits** (~half the CPU) on it.
+
 </div>
 
 **Fix:** collapse the replicas into a single RMS shape nuisance, or convert to a Hessian representation (PDF4LHC21, 30 eigenvectors) and keep those.
@@ -301,5 +313,7 @@ The current treatment overestimates the PDF uncertainty by a factor $\sqrt{100} 
 All eight rate parameters within $3\sigma$ of 1: `norm_top_*` $\approx 0.78$ ($-1.1$ to $-1.3\sigma$), `norm_wjet_*` = 0.87–1.12. **The four top normalisations pull down coherently** — worth understanding before unblinding. These same values reappear as the `asimovFreq` post-fit nuisances, so the two independent stages agree.
 
 <div class="box">
-<b>Priorities:</b> (1) fix the PDF treatment; (2) chase <code>AK4PFPuppi_JES_Total</code> in <code>resolved_e</code>; (3) rebin the resolved tails; (4) widen the scan ranges so the group breakdown converges; (5) understand the coherent ~20% top pull in the CRs.
+
+**Priorities:** (1) fix the PDF treatment; (2) chase `AK4PFPuppi_JES_Total` in `resolved_e`; (3) rebin the resolved tails; (4) widen the scan ranges so the group breakdown converges; (5) understand the coherent ~20% top pull in the CRs.
+
 </div>

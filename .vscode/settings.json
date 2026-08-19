@@ -1,0 +1,11 @@
+{
+  // The slide deck in slides/wv-run3 builds its two-column layout from <div>
+  // elements. Marp strips HTML unless this is enabled, and the slides come out
+  // as literal "<div class=..." text.
+  "markdown.marp.html": "all",
+
+  // lxplus ships no Chrome/Chromium, so Marp's PDF/PPTX/PNG export has nothing
+  // to render with. This is a rootless chrome-headless-shell; see
+  // slides/wv-run3/README.md for how to (re)install it.
+  "markdown.marp.chromePath": "/afs/cern.ch/work/m/mpresill/tools/chrome-headless-shell-linux64/chrome-headless-shell"
+}

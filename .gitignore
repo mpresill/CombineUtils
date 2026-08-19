@@ -1,0 +1,4 @@
+# Marp exports are build products; rebuild with slides/*/make.sh
+slides/**/*.pdf
+slides/**/*.html
+slides/**/*.pptx
