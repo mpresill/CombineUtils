@@ -6,4 +6,3 @@ combine_logger.out
 roostats-*
 *.log
 __pycache__/
-commands.log
