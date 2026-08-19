@@ -69,6 +69,14 @@ RATEPARAM_MAX="${RATEPARAM_MAX:-5}"
 # Random seed. Fixed so file names and results are reproducible.
 SEED="${SEED:-123456}"
 
+# Share one generated Asimov dataset between all stages (GenerateOnly --saveToys
+# + --toysFile) instead of letting each combine call build its own from `-t -1`.
+# On (1) the uncertainty breakdown, the impacts and the scan are all fits to the
+# byte-identical dataset, which is what makes them comparable. On (0) every call
+# just gets plain `-t -1`, exactly as the original scripts did -- one moving part
+# fewer if you are chasing a problem.
+USE_SHARED_TOYS="${USE_SHARED_TOYS:-1}"
+
 # ------------------------------------------------------ nuisance groups -----
 # Used for the uncertainty breakdown (stage: breakdown) and for the grouped
 # impact summary. Format: "label:regex". The regex is handed to combine's

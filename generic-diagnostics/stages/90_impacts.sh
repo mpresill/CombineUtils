@@ -63,6 +63,20 @@ fi
 runs "combineTool.py $common --doInitialFit > 'impacts_initial${TAG}.log' 2>&1" \
   || { warn "initial impact fit failed, see impacts_initial${TAG}.log"; return 1; }
 
+# combineTool exits 0 even when the initial fit produced nothing, and then dies
+# 200 fits later inside the collect step with an unreadable traceback. Check it
+# here, where the message can still say what went wrong.
+initial="$STAGE_DIR/higgsCombine_initialFit_${name}.MultiDimFit.mH${MASS}.root"
+if [ "${DRY_RUN:-0}" != "1" ]; then
+  if ! python3 "$HERE/python/valid_fits.py" --dir "$STAGE_DIR" --name "$name" \
+        --params "$POI" --initial "$initial" --print good >/dev/null; then
+    warn "the initial fit is empty -- see $STAGE_DIR/impacts_initial${TAG}.log"
+    grep -m2 -E "not found|does not exist|Error" "impacts_initial${TAG}.log" 2>/dev/null \
+      | sed 's/^/       /' >&2
+    return 1
+  fi
+fi
+
 # On condor the stage has to run twice: once to submit, once to collect. Decide
 # which of the two this is by counting the per-parameter fit outputs that are
 # already on disk, otherwise a re-run just resubmits the same jobs for ever and
@@ -73,8 +87,11 @@ have=$(ls higgsCombine_paramFit_"${name}"_*.root 2>/dev/null | wc -l)
 if [ "$have" -ge "$want" ]; then
   log "$have/$want per-parameter fits already present, collecting"
 else
+  # combineTool returns non-zero if *any* of the fits failed. That is a warning,
+  # not a stage failure: whether enough of them succeeded is decided by counting
+  # the outputs below.
   runs "combineTool.py $common --doFits $job > 'impacts_fits${TAG}.log' 2>&1" \
-    || { warn "per-nuisance impact fits failed, see impacts_fits${TAG}.log"; rc=1; }
+    || warn "some per-nuisance fits reported an error, see impacts_fits${TAG}.log"
   if [ "${IMPACTS_JOB_MODE:-interactive}" = "condor" ]; then
     log "$want condor jobs submitted ($have already done); re-run this stage"
     log "once the queue is empty and it will collect instead of resubmitting"
@@ -85,7 +102,29 @@ else
   [ "$have" -ge "$want" ] || warn "only $have/$want per-parameter fits produced"
 fi
 
-runs "combineTool.py $common -o 'impacts${TAG}.json' > 'impacts_collect${TAG}.log' 2>&1" \
+# One parameter whose fit failed must not cost the whole ranking. Collect over
+# the parameters that actually produced a usable fit and name the rest.
+collect_named="$named"
+if [ "${DRY_RUN:-0}" != "1" ]; then
+  python3 "$HERE/python/valid_fits.py" --dir "$STAGE_DIR" --name "$name" \
+      --params "$named" --print report | tee "missing_fits${TAG}.txt"
+  good="$(python3 "$HERE/python/valid_fits.py" --dir "$STAGE_DIR" --name "$name" \
+            --params "$named" --print good)"
+  bad="$(python3 "$HERE/python/valid_fits.py" --dir "$STAGE_DIR" --name "$name" \
+            --params "$named" --print bad)"
+  if [ -z "$good" ]; then
+    warn "not one per-parameter fit succeeded; see impacts_fits${TAG}.log"
+    return 1
+  fi
+  if [ -n "$bad" ]; then
+    warn "$(count_csv "$bad") of $(count_csv "$named") parameters have no usable fit;"
+    warn "ranking the remaining $(count_csv "$good"). Names in missing_fits${TAG}.txt"
+    collect_named="$good"
+  fi
+fi
+
+collect_common="${common/--named $named/--named $collect_named}"
+runs "combineTool.py $collect_common -o 'impacts${TAG}.json' > 'impacts_collect${TAG}.log' 2>&1" \
   || { warn "impact collection failed, see impacts_collect${TAG}.log"; return 1; }
 
 runs "plotImpacts.py -i 'impacts${TAG}.json' -o 'impacts${TAG}' --summary \
@@ -99,6 +138,7 @@ runs "python3 '$HERE/python/summarize_impacts.py' --input 'impacts${TAG}.json' \
   || { warn "summarize_impacts.py failed"; rc=1; }
 
 publish "$STAGE_DIR/impacts${TAG}.json" "$STAGE_DIR/impacts_summary${TAG}.txt"
+[ -f "$STAGE_DIR/missing_fits${TAG}.txt" ] && publish "$STAGE_DIR/missing_fits${TAG}.txt"
 for f in "$STAGE_DIR"/impacts*.pdf "$STAGE_DIR"/*.png; do [ -e "$f" ] && publish "$f"; done
 
 [ "$rc" -eq 0 ] && mark_done "$sentinel"

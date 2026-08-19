@@ -62,8 +62,10 @@ def collect(outdir, card, mode):
     r = OrderedDict()
 
     sig = read_text(os.path.join(base, "significance", "significance%s.txt" % tag))
-    r["significance"] = grab(r"significance\s+([-\d.]+)", sig)
-    r["pvalue"] = grab(r"local p-value\s+([-\d.eE+]+)", sig)
+    # Match nan too: a stage that ran and produced nan must not look the same as
+    # a stage that never ran. Both used to render as an em-dash.
+    r["significance"] = grab(r"significance\s+(nan|[-\d.]+)", sig)
+    r["pvalue"] = grab(r"local p-value\s+(nan|[-\d.eE+]+)", sig)
 
     bf = read_text(os.path.join(base, "fitdiag", "bestfit%s.txt" % tag))
     r["r_fit"] = grab(r"r\s+=\s+([-+\d.]+)", bf)
@@ -152,7 +154,11 @@ def fmt(v, spec="%.3f"):
         return "&mdash;"
     if isinstance(v, bool):
         return "yes" if v else '<b style="color:#c0392b">NO</b>'
+    if isinstance(v, float) and v != v:
+        return '<b style="color:#c0392b">nan</b>'
     if isinstance(v, str):
+        if v.strip().lower() == "nan":
+            return '<b style="color:#c0392b">nan</b>'
         return html.escape(v)
     try:
         return spec % v

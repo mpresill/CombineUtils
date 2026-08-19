@@ -45,12 +45,18 @@ else
 fi
 
 # --- 2. FastScan -----------------------------------------------------------
-fd="$CARD_OUT/$MODE/fitdiag/fitDiagnostics${TAG}.root"
-fitres=""; [ -f "$fd" ] && fitres="-f '$fd:fit_s'"
-runs "combineTool.py -M FastScan -w '$WS:w' -d '$TOYFILE:toys/toy_asimov' \
-      $fitres --match '$FASTSCAN_MATCH' -p 40 -o 'fastscan${TAG}' \
-      > 'fastscan${TAG}.log' 2>&1" \
-  || { warn "FastScan failed, see fastscan${TAG}.log"; rc=1; }
+# FastScan needs a dataset it can point at by name, so it is the one thing that
+# cannot work without the shared file.
+if [ -n "${TOYFILE:-}" ]; then
+  fd="$CARD_OUT/$MODE/fitdiag/fitDiagnostics${TAG}.root"
+  fitres=""; [ -f "$fd" ] && fitres="-f '$fd:fit_s'"
+  runs "combineTool.py -M FastScan -w '$WS:w' -d '$TOYFILE:toys/toy_asimov' \
+        $fitres --match '$FASTSCAN_MATCH' -p 40 -o 'fastscan${TAG}' \
+        > 'fastscan${TAG}.log' 2>&1" \
+    || { warn "FastScan failed, see fastscan${TAG}.log"; rc=1; }
+else
+  log "USE_SHARED_TOYS=0, so there is no dataset to hand FastScan; skipping it"
+fi
 
 # --- 3. minimiser stability ------------------------------------------------
 stability() {  # <tag> <opts>
