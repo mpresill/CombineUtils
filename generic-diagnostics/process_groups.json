@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Process grouping for the pre/post-fit plots. Order = stacking order,",
+    "bottom first. 'regex' is matched against the process name as it appears",
+    "in the datacard (re.search, so a substring is enough).",
+    "'signal': true is drawn as an overlaid line instead of a stack entry."
+  ],
+  "groups": [
+    {"label": "W+jets",    "regex": "^WtoLNu-2Jets$",                       "color": "#4e79a7"},
+    {"label": "$t\\bar{t}$",  "regex": "^TTbar$",                              "color": "#f28e2b"},
+    {"label": "single t",  "regex": "^(TbarBQ|TBbarQ|TBbarto|TbarBto|TbarWplus|TWminus)", "color": "#e15759"},
+    {"label": "DY",        "regex": "^DYto2L-2Jets$",                       "color": "#76b7b2"},
+    {"label": "VV QCD",    "regex": "^(ssWW|osWW|WZunpolarized|ZZZ)",       "color": "#59a14f"},
+    {"label": "$V\\gamma$",   "regex": "^VGamma",                              "color": "#edc948"},
+    {"label": "nonprompt", "regex": "^nonprompt$",                          "color": "#b07aa1"},
+    {"label": "VBS EW",    "regex": "^VBS$",  "color": "#c0392b", "signal": true}
+  ]
+}
