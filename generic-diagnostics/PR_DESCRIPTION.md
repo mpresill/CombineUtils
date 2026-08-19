@@ -46,7 +46,7 @@ These are the ones that would have produced wrong numbers that look fine. All ar
 
 Worth a look before the run, because it is a real limitation rather than a bug:
 
-- in the signal regions `data_obs` **is** the MC prediction while blind, so the model fits it perfectly (observed saturated statistic 0.0018 against toys of 4–15, p = 1 by construction);
+- in the signal regions `data_obs` is **pseudo-data generated from the card's own templates** while blind — the prediction with the signal at r = 1 and the rate parameters at their control-region values. A least-squares fit of the `boosted_e` templates to their own `data_obs` returns r = 1.0006, norm_top = 0.7642, norm_wjet = 0.9025 with per-bin residuals of 0.03%. The model has exactly the freedom needed to reproduce it, so the statistic is ~0 and p = 1 by construction;
 - masking the signal regions does not help: each control region is a single bin with its own free rate parameter, so the control regions are exactly saturated (zero d.o.f.).
 
 The stage runs, detects this, and labels the result `VACUOUS` instead of printing a p-value that looks like good news. The commands are unchanged and give real numbers after unblinding. Until then the data check is the new `crfit` stage.

@@ -6,9 +6,16 @@
 # On these cards a goodness of fit cannot say anything yet, for two independent
 # reasons, and the stage checks for both and says so in its report:
 #
-#   * in the signal regions `data_obs` is the MC prediction itself while blind,
-#     so the model fits it essentially perfectly and the test statistic comes
-#     out at ~0 with p = 1 by construction;
+#   * in the signal regions `data_obs` is pseudo-data built from the card's own
+#     templates. It is not the raw prediction -- it is the prediction with the
+#     signal at r = 1 and the two rate parameters at their control-region
+#     values. Fitting the boosted_e templates to its own data_obs by least
+#     squares returns r = 1.0006, norm_top = 0.7642, norm_wjet = 0.9025 with
+#     per-bin residuals of 0.03%, i.e. rounding. The model therefore has exactly
+#     the freedom needed to reproduce this dataset, and the test statistic comes
+#     out at ~0 with p = 1 by construction. (data_obs is non-integer in every SR
+#     bin and carries zero bin errors, which is how you can tell at a glance
+#     that it is not observed data.)
 #   * each control region is a single bin with its own free rate parameter
 #     (norm_top, norm_wjet), so the control regions are exactly saturated: zero
 #     degrees of freedom, and the statistic is identically 0.
