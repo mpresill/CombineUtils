@@ -14,12 +14,15 @@ Everything here is read-only: it never runs combine, so it is safe and fast to
 re-run at any point while a long job is still going.
 """
 import argparse
+import glob
 import html
 import json
 import os
 import re
 import sys
+import tempfile
 from collections import OrderedDict
+from datetime import datetime
 
 STAGES = ["validate", "workspace", "significance", "limits", "fitdiag",
           "nuisances", "prepostfit", "scan", "breakdown", "crfit", "impacts",
@@ -62,8 +65,10 @@ def collect(outdir, card, mode):
     r = OrderedDict()
 
     sig = read_text(os.path.join(base, "significance", "significance%s.txt" % tag))
-    r["significance"] = grab(r"significance\s+([-\d.]+)", sig)
-    r["pvalue"] = grab(r"local p-value\s+([-\d.eE+]+)", sig)
+    # Match nan too: a stage that ran and produced nan must not look the same as
+    # a stage that never ran. Both used to render as an em-dash.
+    r["significance"] = grab(r"significance\s+(nan|[-\d.]+)", sig)
+    r["pvalue"] = grab(r"local p-value\s+(nan|[-\d.eE+]+)", sig)
 
     bf = read_text(os.path.join(base, "fitdiag", "bestfit%s.txt" % tag))
     r["r_fit"] = grab(r"r\s+=\s+([-+\d.]+)", bf)
@@ -135,16 +140,51 @@ def collect(outdir, card, mode):
 
 
 def status_table(outdir):
-    path = os.path.join(outdir, "status.tsv")
-    txt = read_text(path)
-    if not txt:
-        return {}
+    """Merge every run's status file.
+
+    Each run of the driver writes its own status.d/<host>.<pid>.tsv, so that two
+    runs on two machines cannot lose each other's lines. They are read oldest
+    first, letting a later re-run of the same stage supersede an earlier one.
+    status.tsv is the pre-status.d layout, still read so old areas keep working.
+    """
+    paths = glob.glob(os.path.join(outdir, "status.d", "*.tsv"))
+    legacy = os.path.join(outdir, "status.tsv")
+    if os.path.exists(legacy):
+        paths.append(legacy)
+
+    # Order on each row's own timestamp, not on the file's mtime. A file's mtime
+    # moves every time any row is appended to it, so with two overlapping runs an
+    # older result for one stage can sit in the file that happens to be touched
+    # last and overwrite a genuinely newer result for that same stage.
     out = {}
-    for line in txt.splitlines()[1:]:
-        f = line.split("\t")
-        if len(f) >= 5:
-            out[(f[0], f[1], f[2])] = (f[3], f[4])
-    return out
+    for path in paths:
+        for line in read_text(path).splitlines()[1:]:
+            f = line.split("\t")
+            if len(f) < 5:
+                continue
+            key = (f[0], f[1], f[2])
+            when = _parse_time(f[5]) if len(f) >= 6 else None
+            prev = out.get(key)
+            if prev is None or _newer(when, prev[2]):
+                out[key] = (f[3], f[4], when)
+    return {k: (v[0], v[1]) for k, v in out.items()}
+
+
+def _parse_time(txt):
+    try:
+        return datetime.fromisoformat(txt.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _newer(a, b):
+    """Is timestamp a at least as recent as b? An unparseable time loses to a
+    real one, and ties go to the row read later, matching the old behaviour."""
+    if a is None:
+        return b is None
+    if b is None:
+        return True
+    return a >= b
 
 
 def fmt(v, spec="%.3f"):
@@ -152,7 +192,11 @@ def fmt(v, spec="%.3f"):
         return "&mdash;"
     if isinstance(v, bool):
         return "yes" if v else '<b style="color:#c0392b">NO</b>'
+    if isinstance(v, float) and v != v:
+        return '<b style="color:#c0392b">nan</b>'
     if isinstance(v, str):
+        if v.strip().lower() == "nan":
+            return '<b style="color:#c0392b">nan</b>'
         return html.escape(v)
     try:
         return spec % v
@@ -189,9 +233,24 @@ def main():
     p.add_argument("--wwwdir", required=True)
     p.add_argument("--cards", nargs="+", required=True)
     p.add_argument("--modes", nargs="+", required=True)
+    p.add_argument("--include-known", action="store_true",
+                   help="also cover cards and modes that earlier runs recorded, "
+                        "not just the ones selected now. The page is one file "
+                        "for the whole area: without this, a run over one card "
+                        "would drop every other card from it.")
     a = p.parse_args()
 
     st = status_table(a.outdir)
+    cards, modes = list(a.cards), list(a.modes)
+    if a.include_known:
+        for card, mode, _stage in st:
+            if card and card not in cards:
+                cards.append(card)
+            if mode and mode not in modes:
+                modes.append(mode)
+        cards.sort()
+        modes.sort()
+    a.cards, a.modes = cards, modes
     H = ["<!doctype html><meta charset='utf-8'>",
          "<title>WV run 3 -- combine diagnostics</title>",
          "<style>%s</style>" % CSS,
@@ -310,8 +369,23 @@ def main():
 
     os.makedirs(a.wwwdir, exist_ok=True)
     out = os.path.join(a.wwwdir, "index.html")
-    with open(out, "w") as f:
-        f.write("\n".join(H))
+    # Write and rename, so that two runs finishing at once can only ever leave a
+    # complete page behind -- never one truncated mid-table for whoever reloads.
+    # The PID alone is not unique across hosts, and concurrent runs on separate
+    # nodes are the point of all this: two nodes sharing a PID would open the
+    # same temp inode, and one rename would publish the other's partial page and
+    # break its replace. mkstemp allocates a name no one else holds, in the same
+    # directory so the rename stays atomic.
+    fd, tmp = tempfile.mkstemp(prefix="index.", suffix=".tmp", dir=a.wwwdir)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(H))
+        os.chmod(tmp, 0o644)          # mkstemp makes it 0600; this is a web area
+        os.replace(tmp, out)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
     print("wrote %s" % out)
     return 0
 

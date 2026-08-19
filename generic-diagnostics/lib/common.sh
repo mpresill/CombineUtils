@@ -14,9 +14,27 @@ ok()    { printf '%s[ OK ]%s %s\n' "$_c_grn" "$_c_off" "$*"; }
 warn()  { printf '%s[WARN]%s %s\n' "$_c_ylw" "$_c_off" "$*" >&2; }
 die()   { printf '%s[FAIL]%s %s\n' "$_c_red" "$_c_off" "$*" >&2; exit 1; }
 
+# Echo a command. --named on the combined card carries 211 parameter names and
+# turns a stage log into 7 kB of unreadable text per line, so long commands are
+# abbreviated on screen and written out in full to commands.log next to the
+# stage output, where they stay copy-pasteable.
+ECHO_MAX=${ECHO_MAX:-600}
+echo_cmd() {
+  local c="$1"
+  if [ -n "${STAGE_DIR:-}" ] && [ "${DRY_RUN:-0}" != "1" ]; then
+    printf '%s\n\n' "$c" >> "$STAGE_DIR/commands.log"
+  fi
+  if [ "${#c}" -gt "$ECHO_MAX" ] && [ "${DRY_RUN:-0}" != "1" ]; then
+    printf '%s+%s %s ... [%d chars, full command in commands.log]\n' \
+      "$_c_ylw" "$_c_off" "${c:0:$ECHO_MAX}" "${#c}"
+  else
+    printf '%s+%s %s\n' "$_c_ylw" "$_c_off" "$c"
+  fi
+}
+
 # Run a command, echoing it first. Honours DRY_RUN=1.
 run() {
-  printf '%s+%s %s\n' "$_c_ylw" "$_c_off" "$*"
+  echo_cmd "$*"
   [ "${DRY_RUN:-0}" = "1" ] && return 0
   "$@"
 }
@@ -25,7 +43,7 @@ run() {
 # wherever combine options carry quotes that must survive, e.g.
 #   --setParameterRanges 'rgx{norm_.*}'=0,5
 runs() {
-  printf '%s+%s %s\n' "$_c_ylw" "$_c_off" "$1"
+  echo_cmd "$1"
   [ "${DRY_RUN:-0}" = "1" ] && return 0
   bash -c "$1"
 }
@@ -218,7 +236,30 @@ group_regex()  { local g; for g in "${NUISANCE_GROUPS[@]}"; do
 #                     data; the signal-region "data_obs" is MC.
 #
 # Sets DATA_OPTS (to be appended to every combine command) and TOYFILE.
+# True when the GenerateOnly output really holds the dataset combine will look
+# for with `-t -1 --toysFile`.
+toyfile_has_dataset() {
+  python3 - "$1" <<'PYEOF' 2>/dev/null
+import sys, ROOT
+ROOT.gROOT.SetBatch(True)
+ROOT.gErrorIgnoreLevel = ROOT.kFatal
+f = ROOT.TFile.Open(sys.argv[1])
+if not f or f.IsZombie():
+    sys.exit(1)
+d = f.Get("toys")
+sys.exit(0 if d and d.Get("toy_asimov") else 1)
+PYEOF
+}
+
 ensure_toy_dataset() {
+  # The simple path: no shared file, every call builds its own Asimov from -t -1.
+  if [ "${USE_SHARED_TOYS:-1}" != "1" ]; then
+    TOYFILE=""
+    DATA_OPTS="$TOY_OPTS --expectSignal $EXPECT_SIGNAL"
+    export TOYFILE DATA_OPTS
+    log "dataset: built per call ($TOY_OPTS), USE_SHARED_TOYS=0"
+    return 0
+  fi
   local dir="$CARD_OUT/${MODE}/toys"
   local tag="_toy${TAG}"
   mkdir -p "$dir"
@@ -229,14 +270,35 @@ ensure_toy_dataset() {
     return 0
   fi
   TOYFILE="$(combine_out "$dir" "$tag" GenerateOnly)"
+  # A GenerateOnly that fails still leaves a small, *empty* output file behind.
+  # Reusing it poisons every later stage: combine reports "Toy toy_asimov not
+  # found", falls back to nothing, and the failure only surfaces several stages
+  # downstream as an unreadable combineTool traceback. So never trust the glob
+  # alone -- open the file and check the dataset is really in it.
+  if [ -n "$TOYFILE" ] && ! toyfile_has_dataset "$TOYFILE"; then
+    warn "$TOYFILE contains no toys/toy_asimov -- discarding it and regenerating"
+    rm -f "$TOYFILE"
+    TOYFILE=""
+  fi
   if [ -z "$TOYFILE" ] || [ "${FORCE:-0}" = "1" ]; then
     log "generating the $MODE dataset once for $CARD"
-    runs "cd '$dir' && combine -M GenerateOnly -d '$WS' -n '$tag' -m $MASS \
+    if ! runs "cd '$dir' && combine -M GenerateOnly -d '$WS' -n '$tag' -m $MASS \
           $TOY_OPTS --expectSignal $EXPECT_SIGNAL --saveToys -s $SEED \
-          $MINIMIZER_OPTS > gen.log 2>&1" || { warn "GenerateOnly failed, see $dir/gen.log"; return 1; }
+          $MINIMIZER_OPTS > gen.log 2>&1"; then
+      warn "GenerateOnly failed, see $dir/gen.log"
+      tail -3 "$dir/gen.log" 2>/dev/null | sed 's/^/       /' >&2
+      # Do not leave the stub behind for the next run to pick up.
+      rm -f "$(combine_out "$dir" "$tag" GenerateOnly)"
+      return 1
+    fi
     TOYFILE="$(combine_out "$dir" "$tag" GenerateOnly)"
   fi
   [ -n "$TOYFILE" ] || { warn "no toy file produced in $dir"; return 1; }
+  if ! toyfile_has_dataset "$TOYFILE"; then
+    warn "GenerateOnly produced $TOYFILE but it holds no dataset; see $dir/gen.log"
+    rm -f "$TOYFILE"
+    return 1
+  fi
   # -t -1 makes combine read toys/toy_asimov out of TOYFILE.
   DATA_OPTS="-t -1 --toysFile $TOYFILE --expectSignal $EXPECT_SIGNAL"
   export TOYFILE DATA_OPTS

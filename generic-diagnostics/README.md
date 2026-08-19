@@ -148,7 +148,9 @@ own initial-fit file. Everything that looks up a combine output still globs
 ## Notes and gotchas
 
 * **Goodness of fit cannot say anything yet.** In the signal regions `data_obs`
-  is the MC prediction itself while blind, so the model fits it perfectly and
+  is pseudo-data built from the card's own templates while blind (the
+  prediction with r = 1 and the rate parameters at their control-region values,
+  reproducible to ~0.03%), so the model fits it perfectly and
   the p-value comes out at 1 by construction. Masking the signal regions does
   not help either: each control region is a single bin with its own free rate
   parameter, so the control regions are exactly saturated (zero degrees of

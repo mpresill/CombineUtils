@@ -118,11 +118,25 @@ mkdir -p "$OUTDIR" || die "cannot create OUTDIR=$OUTDIR"
 # and the web server would otherwise serve the php gallery instead.
 [ "${DRY_RUN:-0}" = "1" ] || mkdir -p "$WWWDIR" || die "cannot create WWWDIR=$WWWDIR"
 
-STATUS_FILE="$OUTDIR/status.tsv"
-# Write the header first, then take the start line, so that the header itself
-# (whose 4th field is "status", not "OK") is never scanned as a failed stage.
-[ -f "$STATUS_FILE" ] || printf 'card\tmode\tstage\tstatus\tseconds\tstarted\n' > "$STATUS_FILE"
-RUN_START_LINE=$(( $(wc -l < "$STATUS_FILE") + 1 ))
+# Each run appends to its own file rather than to one shared status.tsv. Two
+# runs on different cards are a normal thing to want (one lxplus node per card),
+# and concurrent appends to a single file on AFS can lose lines: AFS resolves
+# write conflicts per file, not per record, so the second closer wins outright.
+# Separate files also mean the end-of-run failure list below covers this run
+# only, with no line arithmetic.
+STATUS_DIR="$OUTDIR/status.d"
+mkdir -p "$STATUS_DIR" || die "cannot create $STATUS_DIR"
+# hostname+PID is not unique over time: PIDs get reused, and a later run landing
+# on a recycled PID would truncate the earlier run's file and drop its stages
+# from the merged summary. mktemp allocates the name atomically instead, so a
+# status file, once written, is never reopened by anything.
+if [ "${DRY_RUN:-0}" != "1" ]; then
+  STATUS_FILE="$(mktemp "$STATUS_DIR/$(hostname -s).$(date +%Y%m%dT%H%M%S).XXXXXX.tsv")" \
+    || die "cannot create a status file in $STATUS_DIR"
+  printf 'card\tmode\tstage\tstatus\tseconds\tstarted\n' > "$STATUS_FILE"
+else
+  STATUS_FILE="$STATUS_DIR/(dry run)"
+fi
 
 record() {  # card mode stage status seconds
   [ "${DRY_RUN:-0}" = "1" ] && return 0
@@ -207,7 +221,7 @@ log "=== building summary page ==="
 if [ "${DRY_RUN:-0}" != "1" ]; then
   python3 "$HERE/python/make_summary.py" \
       --outdir "$OUTDIR" --wwwdir "$WWWDIR" \
-      --cards "${CARDS[@]}" --modes "${MODES[@]}" \
+      --cards "${CARDS[@]}" --modes "${MODES[@]}" --include-known \
     && ok "summary: $WWWDIR/index.html" \
     || warn "summary page failed"
 fi
@@ -215,8 +229,8 @@ fi
 printf '\n'
 log "status table: $STATUS_FILE"
 if [ "${DRY_RUN:-0}" != "1" ]; then
-  n=$(awk -F'\t' -v s="$RUN_START_LINE" \
-        'NR>=s && $4!="OK" {print "  " $1" "$2" "$3" -> "$4}' "$STATUS_FILE" | tee /dev/stderr | wc -l)
+  n=$(awk -F'\t' 'NR>1 && $4!="OK" {print "  " $1" "$2" "$3" -> "$4}' \
+        "$STATUS_FILE" | tee /dev/stderr | wc -l)
   [ "$n" = "0" ] && ok "every stage of this run finished successfully"
 fi
 log "web area: $WWWDIR"

@@ -35,6 +35,11 @@ txt = ("card            %s\nmode            %s\nr injected      %s\n"
        % (sys.argv[3], sys.argv[4], sys.argv[5], z, p))
 open(sys.argv[2], "w").write(txt)
 print(txt)
+# A nan here means combine ran but had nothing to fit -- almost always a toy
+# file with no dataset in it. Writing "nan" and reporting OK hides that in the
+# summary page as an empty cell, indistinguishable from a stage never run.
+if z != z:
+    sys.exit("significance is nan: combine produced no usable result")
 PY
 rc=$?
 fi
