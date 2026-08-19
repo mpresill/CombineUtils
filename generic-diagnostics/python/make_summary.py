@@ -20,7 +20,9 @@ import json
 import os
 import re
 import sys
+import tempfile
 from collections import OrderedDict
+from datetime import datetime
 
 STAGES = ["validate", "workspace", "significance", "limits", "fitdiag",
           "nuisances", "prepostfit", "scan", "breakdown", "crfit", "impacts",
@@ -145,18 +147,44 @@ def status_table(outdir):
     first, letting a later re-run of the same stage supersede an earlier one.
     status.tsv is the pre-status.d layout, still read so old areas keep working.
     """
-    paths = sorted(glob.glob(os.path.join(outdir, "status.d", "*.tsv")),
-                   key=lambda q: os.path.getmtime(q))
+    paths = glob.glob(os.path.join(outdir, "status.d", "*.tsv"))
     legacy = os.path.join(outdir, "status.tsv")
     if os.path.exists(legacy):
-        paths.insert(0, legacy)
+        paths.append(legacy)
+
+    # Order on each row's own timestamp, not on the file's mtime. A file's mtime
+    # moves every time any row is appended to it, so with two overlapping runs an
+    # older result for one stage can sit in the file that happens to be touched
+    # last and overwrite a genuinely newer result for that same stage.
     out = {}
     for path in paths:
         for line in read_text(path).splitlines()[1:]:
             f = line.split("\t")
-            if len(f) >= 5:
-                out[(f[0], f[1], f[2])] = (f[3], f[4])
-    return out
+            if len(f) < 5:
+                continue
+            key = (f[0], f[1], f[2])
+            when = _parse_time(f[5]) if len(f) >= 6 else None
+            prev = out.get(key)
+            if prev is None or _newer(when, prev[2]):
+                out[key] = (f[3], f[4], when)
+    return {k: (v[0], v[1]) for k, v in out.items()}
+
+
+def _parse_time(txt):
+    try:
+        return datetime.fromisoformat(txt.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _newer(a, b):
+    """Is timestamp a at least as recent as b? An unparseable time loses to a
+    real one, and ties go to the row read later, matching the old behaviour."""
+    if a is None:
+        return b is None
+    if b is None:
+        return True
+    return a >= b
 
 
 def fmt(v, spec="%.3f"):
@@ -343,10 +371,21 @@ def main():
     out = os.path.join(a.wwwdir, "index.html")
     # Write and rename, so that two runs finishing at once can only ever leave a
     # complete page behind -- never one truncated mid-table for whoever reloads.
-    tmp = "%s.%d.tmp" % (out, os.getpid())
-    with open(tmp, "w") as f:
-        f.write("\n".join(H))
-    os.replace(tmp, out)
+    # The PID alone is not unique across hosts, and concurrent runs on separate
+    # nodes are the point of all this: two nodes sharing a PID would open the
+    # same temp inode, and one rename would publish the other's partial page and
+    # break its replace. mkstemp allocates a name no one else holds, in the same
+    # directory so the rename stays atomic.
+    fd, tmp = tempfile.mkstemp(prefix="index.", suffix=".tmp", dir=a.wwwdir)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(H))
+        os.chmod(tmp, 0o644)          # mkstemp makes it 0600; this is a web area
+        os.replace(tmp, out)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
     print("wrote %s" % out)
     return 0
 

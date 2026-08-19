@@ -126,9 +126,16 @@ mkdir -p "$OUTDIR" || die "cannot create OUTDIR=$OUTDIR"
 # only, with no line arithmetic.
 STATUS_DIR="$OUTDIR/status.d"
 mkdir -p "$STATUS_DIR" || die "cannot create $STATUS_DIR"
-STATUS_FILE="$STATUS_DIR/$(hostname -s).$$.tsv"
+# hostname+PID is not unique over time: PIDs get reused, and a later run landing
+# on a recycled PID would truncate the earlier run's file and drop its stages
+# from the merged summary. mktemp allocates the name atomically instead, so a
+# status file, once written, is never reopened by anything.
 if [ "${DRY_RUN:-0}" != "1" ]; then
+  STATUS_FILE="$(mktemp "$STATUS_DIR/$(hostname -s).$(date +%Y%m%dT%H%M%S).XXXXXX.tsv")" \
+    || die "cannot create a status file in $STATUS_DIR"
   printf 'card\tmode\tstage\tstatus\tseconds\tstarted\n' > "$STATUS_FILE"
+else
+  STATUS_FILE="$STATUS_DIR/(dry run)"
 fi
 
 record() {  # card mode stage status seconds
