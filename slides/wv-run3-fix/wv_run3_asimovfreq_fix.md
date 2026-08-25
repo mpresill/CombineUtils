@@ -75,11 +75,9 @@ style: |
 <!-- _class: title -->
 <!-- _paginate: false -->
 
-# WV Run-3 VBS — the `asimovFreq` snapshot fix
+# WV Run-3 VBS — combined-card diagnostics
 
-## Re-run of the combined card after correcting the post-fit Asimov
-
-Supersedes the `asimovFreq` numbers in the original `wv-run3` deck (2026-08-19)
+## `asimov` vs `asimovFreq`, blind
 
 Combine v10.0.2 — CMSSW_14_1_0_pre4
 
@@ -87,127 +85,54 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 
 ---
 
-# What was wrong
+# Results — combined
 
-`GenerateOnly -t -1 --toysFrequentist` writes **two** objects into the toy file: `toys/toy_asimov` (the dataset) and `toys/toy_asimov_snapshot` (the global observables — the auxiliary measurements — moved to the same post-fit values the dataset was built at).
+| mode | Z | p | $\hat r$ | $\sigma_{\rm tot}$ | $\sigma_{\rm stat}$ | $\sigma_{\rm syst}$ | dominant syst. | status | covQual |
+|---|---|---|---|---|---|---|---|---|---|
+| `asimov` | 3.747 | $8.9\times10^{-5}$ | $+1.0000$ | 0.4019 | 0.1905 | 0.3555 | btag | 0 | 2 |
+| `asimovFreq` | 2.915 | $1.8\times10^{-3}$ | $+1.0002$ | 0.4828 | 0.2385 | 0.4198 | MC_stat | 0 | 3 |
 
 <div class="box">
 
-`--toysFrequentist` must be repeated on **every command that reads the file**. Combine only loads the snapshot when that flag is given again on the reading side. Every downstream `asimovFreq` command in the pipeline (significance, limits, fitdiag, scan, breakdown, impacts) was missing it.
+**Uncertainty breakdown by group** (no plot, numbers only — quadrature-sum totals, not stat-only-subtraction quoted above):
+
+`asimov` — btag 55.1%, bkg_norm 55.0%, theory 41.8%, MC_stat 41.5%, V_tagging 40.4%, JES_JER 10.5%, fakes 7.6%, pileup_lumi 5.4%, leptons 5.0%
+
+`asimovFreq` — MC_stat 49.5%, bkg_norm 46.4%, btag 45.7%, V_tagging 43.9%, theory 36.3%, JES_JER 27.7%, leptons 25.7%, fakes 16.3%, pileup_lumi 6.2%
 
 </div>
-
-**Effect:** the dataset came back correctly, but the global observables stayed at their nominal values. The constraint terms then pulled every nuisance back towards zero while the dataset said otherwise — the fit no longer returned $r=1$, and every uncertainty, significance and impact derived from it was quietly wrong. Not a crash, not a warning: a self-consistent-looking but incorrect Asimov.
-
-**Fix:** `lib/common.sh::ensure_toy_dataset` now appends the same `--toysFrequentist` flag it used to *build* the file to `DATA_OPTS` on every read, and the freshness check (`older_than_workspace`) was extended to also catch a snapshot fit that predates the dataset it was fit to.
 
 ---
 
-# Combined card — before vs after
+# Flagged pathologies — combined
 
-| | before (buggy) | after (fixed) |
-|---|---|---|
-| $\hat r$ | $0.998^{+0.406}_{-0.357}$ | $1.000^{+0.538}_{-0.403}$ |
-| significance | 3.85 $\sigma$ | **2.91** $\sigma$ |
-| local $p$ | $5.9\times10^{-5}$ | $1.78\times10^{-3}$ |
-| $\sigma_{\mathrm{tot}}$ | 0.380 | 0.471 |
-| covQual | 3 | 3 (accurate) |
-| median expected limit | — | $r < 0.690$ |
+<span class="tiny">Counts, not verdicts — green means nothing was flagged.</span>
+
+| mode | ident. Up/Down | one-sided | large lnN | tmpl errors | tmpl warnings | prunable | \|pull\|>1 | over-constr. | inflated |
+|---|---|---|---|---|---|---|---|---|---|
+| `asimov` | 46 | 32 | 25 | **0** | 149 | 12 | 7 | 0 | **0** |
+| `asimovFreq` | 46 | 32 | 25 | **0** | 149 | 12 | 1 | 4 | — |
 
 <div class="box">
 
-**The corrected number is materially different, not a rounding change.** The buggy run understated $\sigma_r$ by ~20% because the nuisance constraints were anchored to their nominal (not post-fit) values, making the fit look artificially tighter. **2.91$\sigma$ is the number to quote for `asimovFreq`, not 3.85$\sigma$.**
+`asimov` also reports **non-zero pull on Asimov = 0**, as required for a pre-fit Asimov (not applicable to `asimovFreq`). `minimiser stable` / `CCC p` / `GoF` are not populated per-mode on the summary page — see the `crfit`/`gof` stage pages directly.
 
 </div>
-
-The `asimov` (pre-fit) mode did not use `--toysFrequentist` at all and is **unaffected** — its 3.74$\sigma$ / $1.000^{+0.440}_{-0.344}$ from the original deck still stands.
 
 ---
 
 <!-- _class: fig -->
 
-# Impact ranking — buggy vs fixed
+# Nuisance correlation with $r$ — `asimov`
 
-<div class="cols">
-<div>
-
-### before (buggy)
-![w:475](figs/impacts_asimovFreq_summary_buggy.png)
-
-</div>
-<div>
-
-### after (fixed)
-![w:475](figs/impacts_asimovFreq_summary.png)
-
-</div>
-</div>
-
-**The ranking itself is stable** — the same rate parameters and `sf_btag_cferr1` lead in both — but every $\Delta r$ is larger after the fix, consistent with the wider $\sigma_{\mathrm{tot}}$.
+![h:565](figs/correlations_asimov.png)
 
 ---
 
 <!-- _class: fig -->
 
-# Impacts — combined, `asimovFreq` (fixed), page 1 of 6
+# Nuisance correlation with $r$ — `asimovFreq`
 
-![h:565](figs/impacts_asimovFreq_p1.png)
+![h:565](figs/correlations_asimovFreq.png)
 
-<span class="tiny">211/211 per-parameter fits usable. Pulls now reflect the correct post-fit nuisance values.</span>
-
----
-
-# Where the uncertainty comes from (fixed)
-
-<div class="cols">
-<div>
-
-![w:420](figs/breakdown_asimovFreq.png)
-<span class="tiny">after (fixed)</span>
-
-</div>
-<div>
-
-![w:420](figs/breakdown_asimovFreq_buggy.png)
-<span class="tiny">before (buggy)</span>
-
-</div>
-</div>
-
-| group | $\sigma$ frozen | contribution | % of total |
-|---|---|---|---|
-| MC_stat | 0.4089 | 0.2331 | 49.5% |
-| bkg_norm | 0.4170 | 0.2184 | 46.4% |
-| btag | 0.4186 | 0.2153 | 45.7% |
-| V_tagging | 0.4229 | 0.2066 | 43.9% |
-| theory | 0.4387 | 0.1707 | 36.3% |
-| JES_JER | 0.4523 | 0.1304 | 27.7% |
-| leptons | 0.4549 | 0.1211 | 25.7% |
-| fakes | 0.4644 | 0.0766 | 16.3% |
-| pileup_lumi | 0.4698 | 0.0291 | 6.2% |
-
-<div class="box">
-
-**All nine groups now converge with a positive contribution** — no more of the negative/failed subtractions that made the original breakdown untrustworthy. Ordering is unchanged: MC stat and background normalisation still dominate.
-
-</div>
-
----
-
-# Takeaways
-
-## What changed
-- **Quote 2.91$\sigma$ / $r = 1.000^{+0.538}_{-0.403}$ for `asimovFreq`, not the 3.85$\sigma$ in the original deck.** The `asimov` (pre-fit) number is untouched.
-- The `asimov` vs `asimovFreq` agreement claimed in the original deck ("the two modes agree to 3%: the card is stable") **no longer holds** — they now differ by ~0.8$\sigma$. That gap is real: it is the effect of fitting nuisances to the (blind) SR pseudo-data plus the real CR data before building the Asimov, and is expected to shrink once the fit-quality issues below are addressed.
-- The group breakdown is now trustworthy end to end — every `--freezeNuisanceGroups` fit converged, so the caveat in the original deck about dropping the group table no longer applies.
-
-## Still open (unchanged from the original deck)
-1. Fix the PDF replica treatment (still overestimates by $\sqrt{100}=10$).
-2. Chase the one-sided `AK4PFPuppi_JES_Total` impact in `resolved_e`.
-3. Understand the coherent ~20% top-normalisation pull seen in the CR-only fit to data.
-
-<div class="box">
-
-Only the **combined** card was re-run under the fix; `boosted_e/mu` and `resolved_e/mu` in the original deck were driven by the same buggy `asimovFreq` reading path and should be re-run before being quoted again.
-
-</div>
+<span class="tiny">Same leading rate parameters as `asimov`, plus `sf_btag_cferr1`/`sf_btag_lfstats2` rising once nuisances are fit to data.</span>

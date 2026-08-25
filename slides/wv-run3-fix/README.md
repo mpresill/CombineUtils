@@ -1,11 +1,14 @@
-# WV Run-3 VBS — `asimovFreq` snapshot fix
+# WV Run-3 VBS — combined-card diagnostics
 
-`wv_run3_asimovfreq_fix.md` is a 7-slide Marp deck, same Texas Tech theme as
-`../wv-run3/`, covering the corrected combined-card `asimovFreq` results after
-fixing the missing `--toysFrequentist` on the reading side (see
-`generic-diagnostics/lib/common.sh::ensure_toy_dataset`). It supersedes the
-`asimovFreq` numbers in `../wv-run3/wv_run3_diagnostics.md` — the `asimov`
-numbers there are unaffected and still stand.
+`wv_run3_asimovfreq_fix.md` is a 5-slide Marp deck, same Texas Tech theme as
+`../wv-run3/`, summarising the current combined-card `asimov` vs `asimovFreq`
+results: the Results and Flagged-pathologies tables (same numbers as the
+`combined` rows of the web summary page), the uncertainty breakdown by group
+as text, and the nuisance-correlation-with-r plot for each mode. The
+`asimovFreq` numbers here are the corrected ones (after fixing the missing
+`--toysFrequentist` on the reading side in
+`generic-diagnostics/lib/common.sh::ensure_toy_dataset`) and supersede the
+`asimovFreq` numbers in `../wv-run3/wv_run3_diagnostics.md`.
 
 ## Building it
 
@@ -27,7 +30,7 @@ shell that never sourced CMSSW.
 
 ## Figures
 
-`figs/*.png` are the same trim/rasterise recipe as `../wv-run3/`, pulled from
-the Aug 24 2026 re-run under `/eos/user/m/mpresill/www/VBS/wv-run3/combined/asimovFreq/`.
-The `_buggy` ones are copied straight from `../wv-run3/figs/` — the original,
-pre-fix run — for the before/after comparison slides.
+`figs/correlations_asimov.png` and `figs/correlations_asimovFreq.png` are
+copied straight from `combined/{asimov,asimovFreq}/nuisances/correlations_combined_*_poi.png`
+in the scratch area (`OUTDIR` in `generic-diagnostics/config.sh`) — the
+"correlation with r" bar chart, not the full nuisance-nuisance matrix.
