@@ -131,9 +131,25 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 
 <!-- _class: fig -->
 
+# Nuisance-nuisance correlation matrix — `asimov`
+
+![h:600](figs/corr_matrix_asimov.png)
+
+---
+
+<!-- _class: fig -->
+
 # Nuisance correlation with $r$ — `asimovFreq`
 
 ![h:565](figs/corr_r_asimovFreq.png)
+
+---
+
+<!-- _class: fig -->
+
+# Nuisance-nuisance correlation matrix — `asimovFreq`
+
+![h:600](figs/corr_matrix_asimovFreq.png)
 
 <span class="tiny">Same leading rate parameters as `asimov`, plus `sf_btag_cferr1`/`sf_btag_lfstats2` rising once nuisances are fit to data.</span>
 
