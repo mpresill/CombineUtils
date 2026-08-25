@@ -136,3 +136,52 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 ![h:565](figs/correlations_asimovFreq.png)
 
 <span class="tiny">Same leading rate parameters as `asimov`, plus `sf_btag_cferr1`/`sf_btag_lfstats2` rising once nuisances are fit to data.</span>
+
+---
+
+<!-- _class: fig -->
+
+# Impacts — combined, `asimov` (page 1 of 6)
+
+![h:565](figs/impacts_asimov_p1.png)
+
+<span class="tiny">211/211 per-parameter fits usable. Pulls identically zero, as required for a pre-fit Asimov.</span>
+
+---
+
+<!-- _class: fig -->
+
+# Impacts — combined, `asimovFreq` (page 1 of 6)
+
+![h:565](figs/impacts_asimovFreq_p1.png)
+
+<span class="tiny">211/211 fits usable. Pulls now non-zero — the ranking is built at the nuisance values the data prefers.</span>
+
+---
+
+# Impact summaries side by side
+
+<div class="cols">
+<div>
+
+### `asimov`
+![w:475](figs/impacts_asimov_summary.png)
+
+</div>
+<div>
+
+### `asimovFreq`
+![w:475](figs/impacts_asimovFreq_summary.png)
+
+</div>
+</div>
+
+---
+
+<!-- _class: fig -->
+
+# Control-region fit to real data
+
+![h:500](figs/crfit_combined.png)
+
+<span class="tiny">`combine -M MultiDimFit --algo singles`, observed data, signal regions masked via `--setParameters mask_SR=1,...` and `r` frozen to 0 — the one stage here that touches real data, and only in the control regions.</span>
