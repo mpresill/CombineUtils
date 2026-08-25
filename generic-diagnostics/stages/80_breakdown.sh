@@ -31,12 +31,19 @@ resolve_parameter_sets || return 1
 cd "$STAGE_DIR" || return 1
 rc=0
 
+# ROBUST_OPTS matters here, not just for speed: without it the default crossing
+# algorithm gives up on one side of the interval on the harder (post-fit Asimov)
+# datasets -- "No valid low-error found, will report difference to minimum of
+# range" -- and combine then reports the distance to R_MIN as the error, which
+# silently turns one row of the breakdown into nonsense. It also keeps these
+# fits consistent with the best-fit snapshot they start from, which is built
+# with the same options.
 singles() {  # <tag> [<comma separated parameters to freeze>]
   local tag="$1" freeze="${2:-}"
   runs "combine -M MultiDimFit -d '$SNAPSHOT_WS' -w w --snapshotName MultiDimFit \
         -m $MASS -n '$tag' --algo singles $DATA_OPTS -P $POI --floatOtherPOIs 1 \
         --setParameterRanges ${POI}=${R_MIN},${R_MAX}${RATE_RANGES:+:$RATE_RANGES} \
-        $MINIMIZER_OPTS \
+        $MINIMIZER_OPTS $ROBUST_OPTS \
         ${freeze:+--freezeParameters '$freeze'} \
         > 'fit${tag}.log' 2>&1"
 }

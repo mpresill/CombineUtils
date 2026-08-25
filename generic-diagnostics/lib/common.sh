@@ -96,10 +96,29 @@ need_file() {  # <path> <message>
   if [ "${DRY_RUN:-0}" = "1" ]; then warn "(dry run) $2 -- continuing"; return 0; fi
   warn "$2"; return 1
 }
-# Skip a stage whose sentinel file already exists, unless FORCE=1.
+# Skip a stage whose sentinel file already exists, unless FORCE=1 -- but only if
+# that sentinel is newer than the workspace the stage was fitted to. Rebuilding the workspace -- a new CARD_DIR, an edited datacard --
+# used to leave every earlier sentinel in place, so a single output directory
+# could end up holding results from two different card sets with nothing to say
+# so. Compare against the workspace instead of trusting the sentinel's presence.
 already_done() {
   [ "${FORCE:-0}" = "1" ] && return 1
-  [ -f "$1" ]
+  [ -f "$1" ] || return 1
+  if older_than_workspace "$1"; then
+    warn "$(basename "$(dirname "$1")") predates the current workspace -- redoing it"
+    return 1
+  fi
+  return 0
+}
+
+# True when $1 exists but was written before the workspace it should have been
+# fitted to. Also used for the cached artefacts (shared toy, best-fit snapshot)
+# that are looked up by glob rather than through a sentinel.
+# validate and workspace run before the workspace exists, so their own output is
+# older than it by construction and must not be compared against it.
+older_than_workspace() {
+  case "${STAGE:-}" in validate|workspace) return 1 ;; esac
+  [ -n "${WS:-}" ] && [ -f "$WS" ] && [ -e "$1" ] && [ "$WS" -nt "$1" ]
 }
 mark_done() { [ "${DRY_RUN:-0}" = "1" ] || : > "$1"; }
 
@@ -230,16 +249,30 @@ group_regex()  { local g; for g in "${NUISANCE_GROUPS[@]}"; do
 # subsequent call via `--toysFile ... -t -1`.
 #
 # For MODE=asimov     that is the pre-fit Asimov.
-# For MODE=asimovFreq the nuisances are first fitted to the observed dataset,
-#                     so the Asimov is built at their post-fit values. Note
-#                     that while blind only the control regions carry real
-#                     data; the signal-region "data_obs" is MC.
+# For MODE=asimovFreq the nuisances are first fitted to data_obs, so the Asimov
+#                     is built at their post-fit values.  Whether that is a
+#                     blind-safe operation depends entirely on the card set:
+#                     it is only blind if the signal-region "data_obs" is MC.
+#                     With unblinded cards this fit sees the real signal
+#                     regions, so "asimovFreq" is no longer an expectation.
+#
+# --toysFrequentist must be repeated on every command that READS the file.
+# GenerateOnly writes two objects: toys/toy_asimov (the dataset) and
+# toys/toy_asimov_snapshot (the global observables, i.e. the auxiliary
+# measurements, moved to the same post-fit values the dataset was built at).
+# Combine.cc only looks for that snapshot when --toysFrequentist is given
+# again on the reading side; without it the dataset comes back but the global
+# observables stay at their nominal values, so the constraint terms pull every
+# nuisance back towards zero while the data says otherwise.  The result is not
+# an Asimov at all: the fit no longer returns r = EXPECT_SIGNAL and every
+# uncertainty, significance and impact derived from it is wrong.
 #
 # Sets DATA_OPTS (to be appended to every combine command) and TOYFILE.
 # True when the GenerateOnly output really holds the dataset combine will look
-# for with `-t -1 --toysFile`.
+# for with `-t -1 --toysFile` -- and, in the frequentist case, the global
+# observables snapshot that has to travel with it.
 toyfile_has_dataset() {
-  python3 - "$1" <<'PYEOF' 2>/dev/null
+  python3 - "$1" "${2:-0}" <<'PYEOF' 2>/dev/null
 import sys, ROOT
 ROOT.gROOT.SetBatch(True)
 ROOT.gErrorIgnoreLevel = ROOT.kFatal
@@ -247,11 +280,31 @@ f = ROOT.TFile.Open(sys.argv[1])
 if not f or f.IsZombie():
     sys.exit(1)
 d = f.Get("toys")
-sys.exit(0 if d and d.Get("toy_asimov") else 1)
+if not d or not d.Get("toy_asimov"):
+    sys.exit(1)
+# A frequentist Asimov is only usable together with its global-observables
+# snapshot; a file generated without --toysFrequentist has none and combine
+# would abort on reading it.
+if sys.argv[2] == "1" and not d.Get("toy_asimov_snapshot"):
+    sys.exit(1)
+sys.exit(0)
 PYEOF
 }
 
+# --toysFrequentist, when the current mode calls for it, in a form that can be
+# appended to a reading command.
+toy_freq_opt() {
+  case " ${TOY_OPTS:-} " in
+    *" --toysFrequentist "*) echo "--toysFrequentist" ;;
+    *) echo "" ;;
+  esac
+}
+
 ensure_toy_dataset() {
+  # Repeated on every reading command so that combine restores the global
+  # observables that were saved alongside a frequentist Asimov.
+  local freq; freq="$(toy_freq_opt)"
+  local want_snap=0; [ -n "$freq" ] && want_snap=1
   # The simple path: no shared file, every call builds its own Asimov from -t -1.
   if [ "${USE_SHARED_TOYS:-1}" != "1" ]; then
     TOYFILE=""
@@ -265,7 +318,7 @@ ensure_toy_dataset() {
   mkdir -p "$dir"
   if [ "${DRY_RUN:-0}" = "1" ]; then
     TOYFILE="$dir/higgsCombine${tag}.GenerateOnly.mH${MASS}.${SEED}.root"
-    DATA_OPTS="-t -1 --toysFile $TOYFILE --expectSignal $EXPECT_SIGNAL"
+    DATA_OPTS="-t -1 $freq --toysFile $TOYFILE --expectSignal $EXPECT_SIGNAL"
     export TOYFILE DATA_OPTS
     return 0
   fi
@@ -275,8 +328,13 @@ ensure_toy_dataset() {
   # found", falls back to nothing, and the failure only surfaces several stages
   # downstream as an unreadable combineTool traceback. So never trust the glob
   # alone -- open the file and check the dataset is really in it.
-  if [ -n "$TOYFILE" ] && ! toyfile_has_dataset "$TOYFILE"; then
-    warn "$TOYFILE contains no toys/toy_asimov -- discarding it and regenerating"
+  if [ -n "$TOYFILE" ] && older_than_workspace "$TOYFILE"; then
+    warn "the $MODE dataset predates the current workspace -- regenerating it"
+    rm -f "$TOYFILE"
+    TOYFILE=""
+  fi
+  if [ -n "$TOYFILE" ] && ! toyfile_has_dataset "$TOYFILE" "$want_snap"; then
+    warn "$TOYFILE is not a usable $MODE dataset -- discarding it and regenerating"
     rm -f "$TOYFILE"
     TOYFILE=""
   fi
@@ -294,13 +352,14 @@ ensure_toy_dataset() {
     TOYFILE="$(combine_out "$dir" "$tag" GenerateOnly)"
   fi
   [ -n "$TOYFILE" ] || { warn "no toy file produced in $dir"; return 1; }
-  if ! toyfile_has_dataset "$TOYFILE"; then
-    warn "GenerateOnly produced $TOYFILE but it holds no dataset; see $dir/gen.log"
+  if ! toyfile_has_dataset "$TOYFILE" "$want_snap"; then
+    warn "GenerateOnly produced $TOYFILE but it is not a usable $MODE dataset; see $dir/gen.log"
     rm -f "$TOYFILE"
     return 1
   fi
-  # -t -1 makes combine read toys/toy_asimov out of TOYFILE.
-  DATA_OPTS="-t -1 --toysFile $TOYFILE --expectSignal $EXPECT_SIGNAL"
+  # -t -1 makes combine read toys/toy_asimov out of TOYFILE; $freq is what makes
+  # it read toys/toy_asimov_snapshot as well (see the note above).
+  DATA_OPTS="-t -1 $freq --toysFile $TOYFILE --expectSignal $EXPECT_SIGNAL"
   export TOYFILE DATA_OPTS
   log "dataset: $TOYFILE"
 }
@@ -321,6 +380,15 @@ ensure_bestfit_snapshot() {
     return 0
   fi
   SNAPSHOT_WS="$(combine_out "$dir" "$tag" MultiDimFit)"
+  # The snapshot also has to be newer than the dataset it was fitted to, or the
+  # scan and the breakdown start from a minimum belonging to another Asimov.
+  if [ -n "$SNAPSHOT_WS" ] &&
+     { older_than_workspace "$SNAPSHOT_WS" ||
+       { [ -n "${TOYFILE:-}" ] && [ -f "$TOYFILE" ] && [ "$TOYFILE" -nt "$SNAPSHOT_WS" ]; }; }; then
+    warn "the $MODE best-fit snapshot is older than its inputs -- rebuilding it"
+    rm -f "$SNAPSHOT_WS"
+    SNAPSHOT_WS=""
+  fi
   if [ -z "$SNAPSHOT_WS" ] || [ "${FORCE:-0}" = "1" ]; then
     log "building the best-fit snapshot for $CARD/$MODE"
     runs "cd '$dir' && combine -M MultiDimFit -d '$WS' -n '$tag' -m $MASS \

@@ -20,25 +20,48 @@ NCORES=16 MODES=asimov ./run_diagnostics.sh -c combined -s impacts --condor
 
 ## Why two modes
 
-The analysis is blind, so no stage ever fits the observed dataset in the signal
-regions. Each check runs on an Asimov dataset built in one of two ways:
+No stage fits the observed dataset directly. Each check runs on an Asimov
+dataset built in one of two ways:
 
 | mode | combine options | nuisances set to | what it tests |
 |---|---|---|---|
-| `asimov` | `-t -1` | their pre-fit values | the machinery. **Every pull must come back exactly zero** — a non-zero pull here is a bug, not physics. |
+| `asimov` | `-t -1` | their pre-fit values | the machinery. **Every pull must come back exactly zero and the fit must return r = `EXPECT_SIGNAL` exactly** — anything else here is a bug, not physics. |
 | `asimovFreq` | `-t -1 --toysFrequentist` | their post-fit-to-data values | the same checks around a realistic point: the pulls now show what the data want. |
 
-One caveat that is specific to these cards, and which the reports repeat: the
-signal-region `data_obs` is **MC**, only the two control regions per category
-(`*_TTCR`, `*_WCR`) hold real data. So `--toysFrequentist` is "post-fit to the
-control regions", and any goodness-of-fit statement about real data has to come
-from the control-region-only variant.
+**`asimovFreq` is only blind if the cards are.** Before it builds its Asimov,
+combine fits the model to `data_obs` with the POI fixed at `EXPECT_SIGNAL`.
+With cards whose signal-region `data_obs` is MC that fit only sees the control
+regions, and the mode is a genuine expectation. With unblinded cards
+(`merged_cat_v8_realdata` has real, integer counts in `ch1..ch4`) the same fit
+sees the real signal regions, so the resulting numbers are partly observed and
+must not be shown as expected results. Check the card set, not this file.
+
+Even when the fit *is* correct, the two modes are not expected to agree: the
+post-fit Asimov carries the background normalisations and shape corrections the
+data prefer, so the sensitivity it implies is generally worse than the pre-fit
+one. What is guaranteed is only that **both** return `r = EXPECT_SIGNAL` at the
+minimum. A best fit that is not `EXPECT_SIGNAL` means the dataset and the model
+being fitted to it disagree — see the `--toysFrequentist` note below.
 
 The Asimov dataset is generated **once** per (card, mode) with
 `GenerateOnly --saveToys` and then passed to every subsequent call via
 `--toysFile ... -t -1`. That is what makes the uncertainty breakdown and the
 impacts comparable to each other — they are all fits to literally the same
 dataset.
+
+**`--toysFrequentist` has to be repeated on the reading side.** `GenerateOnly`
+writes two things into the toy file: `toys/toy_asimov`, the dataset, and
+`toys/toy_asimov_snapshot`, the global observables — the auxiliary measurements
+— moved to the same post-fit values the dataset was built at. `Combine.cc` only
+looks for that snapshot when `--toysFrequentist` is given *again* on the
+command that reads the file. Without it the dataset comes back but the global
+observables stay nominal, so every constraint term pulls its nuisance back
+towards zero while the data says otherwise. The fit is then not an Asimov fit
+at all: `r` comes out well away from `EXPECT_SIGNAL`, the uncertainties are
+wrong, and the breakdown can report frozen fits that are *wider* than the total.
+`ensure_toy_dataset` therefore carries the flag into `DATA_OPTS` and refuses to
+reuse a frequentist toy file that has no snapshot in it. The one place this
+cannot be done is `FastScan`, which loads the dataset by name.
 
 ## Stages
 
@@ -147,16 +170,18 @@ own initial-fit file. Everything that looks up a combine output still globs
 
 ## Notes and gotchas
 
-* **Goodness of fit cannot say anything yet.** In the signal regions `data_obs`
-  is pseudo-data built from the card's own templates while blind (the
-  prediction with r = 1 and the rate parameters at their control-region values,
-  reproducible to ~0.03%), so the model fits it perfectly and
-  the p-value comes out at 1 by construction. Masking the signal regions does
-  not help either: each control region is a single bin with its own free rate
-  parameter, so the control regions are exactly saturated (zero degrees of
-  freedom). The stage detects this and labels the results VACUOUS instead of
-  printing a p-value that looks like good news. Re-run it unchanged after
-  unblinding. Until then the data check is the `crfit` stage.
+* **Goodness of fit says nothing on blind cards.** Where the signal-region
+  `data_obs` is pseudo-data built from the card's own templates (the prediction
+  with r = 1 and the rate parameters at their control-region values,
+  reproducible to ~0.03%), the model fits it perfectly and the p-value comes out
+  at 1 by construction. Masking the signal regions does not help either: each
+  control region is a single bin with its own free rate parameter, so the
+  control regions are exactly saturated (zero degrees of freedom). The stage
+  detects this and labels the results VACUOUS instead of printing a p-value that
+  looks like good news. On a card set with real signal-region data the stage
+  becomes meaningful on its own — and so does everything else, which is exactly
+  when `asimovFreq` stops being an expected result. Check which kind of cards
+  `CARD_DIR` points at before reading any of it.
 * **Runtime.** `fitdiag` is the slowest single call: ~10 min on a
   single-category card, because `--saveWithUncertainties` throws 200 toys per
   channel for the per-bin uncertainties. `breakdown` is ~2 min (one fit per

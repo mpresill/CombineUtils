@@ -47,6 +47,10 @@ fi
 # --- 2. FastScan -----------------------------------------------------------
 # FastScan needs a dataset it can point at by name, so it is the one thing that
 # cannot work without the shared file.
+# It also loads that dataset directly, bypassing combine's -t -1 machinery, so
+# on MODE=asimovFreq the global observables stay at their nominal values while
+# the dataset sits at the post-fit ones. Read the resulting curves as "where is
+# the likelihood badly behaved", not as absolute NLL values.
 if [ -n "${TOYFILE:-}" ]; then
   fd="$CARD_OUT/$MODE/fitdiag/fitDiagnostics${TAG}.root"
   fitres=""; [ -f "$fd" ] && fitres="-f '$fd:fit_s'"

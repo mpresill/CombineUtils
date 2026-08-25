@@ -153,6 +153,7 @@ run_stage() {
   [ -n "$script" ] || { warn "no script for stage '$stage', skipping"; return 0; }
 
   export CARD="$card"
+  export STAGE="$stage"
   export CARD_PATH="$CARD_DIR/$card/$CARD_FILE"
   export CARD_OUT="$OUTDIR/$card"
   export WS="$CARD_OUT/workspace.root"

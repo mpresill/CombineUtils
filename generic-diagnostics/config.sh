@@ -6,7 +6,7 @@
 
 # ---------------------------------------------------------------- inputs ----
 # Directory holding one sub-directory per category, each with a datacard.
-CARD_DIR="${CARD_DIR:-/afs/cern.ch/work/j/jinw/public/VBSfit/cards/merged_offset_cat_v8_merged}"
+CARD_DIR="${CARD_DIR:-/afs/cern.ch/work/j/jinw/public/VBSfit/cards/merged_cat_v8_realdata/}"
 # Sub-directories to process (order matters only for the summary page).
 CARDS=(${CARDS:-boosted_e boosted_mu resolved_e resolved_mu combined})
 # Datacard file name inside each sub-directory.
@@ -30,12 +30,17 @@ EXPECT_SIGNAL="${EXPECT_SIGNAL:-1}" # signal strength injected in the Asimov
 R_MIN="${R_MIN:--10}"
 R_MAX="${R_MAX:-10}"
 
-# The analysis is blind: the SR "data_obs" is MC, only the CRs hold real data.
-# Every stage therefore runs on an Asimov dataset, in two flavours:
+# Every stage runs on an Asimov dataset, in two flavours:
 #   asimov      -t -1                     nuisances at their pre-fit values
 #   asimovFreq  -t -1 --toysFrequentist   nuisances at their post-fit-to-data
 #                                         values (a "post-fit Asimov")
 # Set to a subset to run only one of them.
+#
+# BLINDING: asimovFreq fits data_obs before it builds its Asimov, so it is only
+# blind-safe if the signal-region data_obs is MC. Check the card set before you
+# trust it -- CARD_DIR=...merged_cat_v8_realdata has real, integer data in the
+# signal regions, which means its asimovFreq numbers are partly observed and
+# are NOT an expected result. `observed` stays off regardless.
 MODES=(${MODES:-asimov asimovFreq})
 
 toy_opts_for_mode() {
