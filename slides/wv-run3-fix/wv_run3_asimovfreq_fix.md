@@ -81,7 +81,6 @@ style: |
 
 Combine v10.0.2 — CMSSW_14_1_0_pre4
 
-<span class="tiny">Full output: <code>/eos/user/m/mpresill/www/VBS/wv-run3</code> — code: <code>CombineUtils/generic-diagnostics</code></span>
 
 ---
 
@@ -94,7 +93,7 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 
 <div class="box">
 
-**Uncertainty breakdown by group** (no plot, numbers only — quadrature-sum totals, not stat-only-subtraction quoted above):
+**Uncertainty breakdown by group** (quadrature-sum totals, not stat-only-subtraction quoted above):
 
 `asimov` — btag 55.1%, bkg_norm 55.0%, theory 41.8%, MC_stat 41.5%, V_tagging 40.4%, JES_JER 10.5%, fakes 7.6%, pileup_lumi 5.4%, leptons 5.0%
 
@@ -106,7 +105,6 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 
 # Flagged pathologies — combined
 
-<span class="tiny">Counts, not verdicts — green means nothing was flagged.</span>
 
 | mode | ident. Up/Down | one-sided | large lnN | tmpl errors | tmpl warnings | prunable | \|pull\|>1 | over-constr. | inflated |
 |---|---|---|---|---|---|---|---|---|---|
@@ -115,7 +113,7 @@ Combine v10.0.2 — CMSSW_14_1_0_pre4
 
 <div class="box">
 
-`asimov` also reports **non-zero pull on Asimov = 0**, as required for a pre-fit Asimov (not applicable to `asimovFreq`). `minimiser stable` / `CCC p` / `GoF` are not populated per-mode on the summary page — see the `crfit`/`gof` stage pages directly.
+`asimov` also reports **non-zero pull on Asimov = 0**, as required for a pre-fit Asimov (not applicable to `asimovFreq`). 
 
 </div>
 
