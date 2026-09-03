@@ -77,6 +77,37 @@ if [ "${DRY_RUN:-0}" != "1" ]; then
   fi
 fi
 
+# The per-parameter fits from an earlier run are reused when all of them are
+# present -- that is what makes a re-run, and the two-pass condor mode below,
+# cheap. They may only be reused if they were fitted to the workspace and the
+# dataset in use *now*. A regenerated Asimov, or a rebuilt workspace, leaves
+# 200 perfectly readable .root files behind whose numbers belong to a different
+# fit, and combineTool collects them into the json without a word: the ranking
+# then mixes a fresh initial fit with stale per-parameter fits and the pulls it
+# shows are not the pulls of any single fit. Drop those first, so the count
+# below only sees fits that are actually current.
+#
+# FORCE=1 must reach them too. It only ever bypassed already_done, so a forced
+# re-run redid the initial fit and the collect and then quietly reused the same
+# old per-parameter fits -- which is exactly how a run meant to apply a fix
+# ended up republishing the results the fix was supposed to correct.
+stale=0
+for f in higgsCombine_paramFit_"${name}"_*.root; do
+  [ -e "$f" ] || continue
+  if [ "${FORCE:-0}" = "1" ]; then rm -f "$f"; stale=$((stale + 1)); continue; fi
+  for ref in "$WS" "${TOYFILE:-}"; do
+    [ -n "$ref" ] && [ -f "$ref" ] && [ "$ref" -nt "$f" ] || continue
+    rm -f "$f"; stale=$((stale + 1)); break
+  done
+done
+if [ "$stale" -gt 0 ]; then
+  if [ "${FORCE:-0}" = "1" ]; then
+    warn "FORCE=1: discarded $stale per-parameter fits, refitting them"
+  else
+    warn "$stale per-parameter fits predate the workspace or the $MODE dataset -- refitting them"
+  fi
+fi
+
 # On condor the stage has to run twice: once to submit, once to collect. Decide
 # which of the two this is by counting the per-parameter fit outputs that are
 # already on disk, otherwise a re-run just resubmits the same jobs for ever and

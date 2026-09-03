@@ -104,8 +104,8 @@ need_file() {  # <path> <message>
 already_done() {
   [ "${FORCE:-0}" = "1" ] && return 1
   [ -f "$1" ] || return 1
-  if older_than_workspace "$1"; then
-    warn "$(basename "$(dirname "$1")") predates the current workspace -- redoing it"
+  if older_than_inputs "$1"; then
+    warn "$(basename "$(dirname "$1")") predates the current workspace or $MODE dataset -- redoing it"
     return 1
   fi
   return 0
@@ -119,6 +119,29 @@ already_done() {
 older_than_workspace() {
   case "${STAGE:-}" in validate|workspace) return 1 ;; esac
   [ -n "${WS:-}" ] && [ -f "$WS" ] && [ -e "$1" ] && [ "$WS" -nt "$1" ]
+}
+
+# Path of the shared dataset for the current (card, mode) if one has already
+# been generated, without generating it. ensure_toy_dataset runs *after* the
+# sentinel check in every stage, so the staleness test cannot use $TOYFILE.
+mode_toyfile() {
+  [ "${USE_SHARED_TOYS:-1}" = "1" ] || return 0
+  [ -n "${CARD_OUT:-}" ] && [ -n "${MODE:-}" ] || return 0
+  combine_out "$CARD_OUT/${MODE}/toys" "_toy${TAG}" GenerateOnly
+}
+
+# True when $1 predates either of the two things every fit depends on: the
+# workspace, and the shared Asimov dataset. The dataset matters as much as the
+# workspace and used not to be checked at all -- regenerating the asimovFreq
+# toy (which happens whenever the global-observables snapshot is missing, or
+# the workspace is rebuilt) left every downstream sentinel in place, so a stage
+# was skipped and its results kept on describing a fit to the *previous*
+# dataset.
+older_than_inputs() {
+  case "${STAGE:-}" in validate|workspace) return 1 ;; esac
+  older_than_workspace "$1" && return 0
+  local t; t="$(mode_toyfile)"
+  [ -n "$t" ] && [ -f "$t" ] && [ -e "$1" ] && [ "$t" -nt "$1" ]
 }
 mark_done() { [ "${DRY_RUN:-0}" = "1" ] || : > "$1"; }
 
